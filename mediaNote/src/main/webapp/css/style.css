@@ -1,0 +1,128 @@
+/* 기본 초기화 */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+    background-color: #f5f7fa;
+    color: #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+}
+
+.container {
+    background: #ffffff;
+    padding: 40px;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.08);
+    width: 100%;
+    max-width: 500px;
+}
+
+.logo {
+    font-size: 28px;
+    font-weight: 800;
+    color: #007bff;
+    text-align: center;
+    margin-bottom: 30px;
+    letter-spacing: -1px;
+}
+
+/* 입력 영역 스타일 */
+.input-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+select, input[type="text"] {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+select {
+    flex: 1;
+    background-color: #fff;
+    cursor: pointer;
+}
+
+input[type="text"] {
+    flex: 3;
+}
+
+select:focus, input[type="text"]:focus {
+    border-color: #007bff;
+}
+
+/* 책 옵션 (숨겨진 영역) 스타일 */
+.book-extra {
+    display: none; /* 기본은 숨김 */
+    background: #f8f9ff;
+    border: 1px solid #e0e7ff;
+    padding: 20px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.option-section {
+    margin-bottom: 15px;
+}
+
+.option-section:last-child {
+    margin-bottom: 0;
+}
+
+.option-title {
+    font-size: 14px;
+    font-weight: 700;
+    margin-bottom: 10px;
+    color: #555;
+}
+
+.radio-group {
+    display: flex;
+    gap: 20px;
+}
+
+.radio-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-size: 15px;
+}
+
+/* 버튼 스타일 */
+.btn-submit {
+    width: 100%;
+    padding: 14px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.btn-submit:hover {
+    background-color: #0056b3;
+}
+
+/* 결과 영역 */
+#resultArea {
+    margin-top: 20px;
+    padding: 15px;
+    text-align: center;
+    font-weight: 500;
+}
