@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mn.cm.dao.ReviewMapper">
+
+    <insert id="insertOrUpdateReview" parameterType="map">
+        <!-- Use INSERT ... ON DUPLICATE KEY UPDATE to upsert by unique (USER_ID, ISBN) -->
+        INSERT INTO MN_BK_RVW (ISBN13, ISBN, USER_ID, READ_YN, RATING, COMNET, REVIEW_TEXT, REG_DT, MOD_DT)
+        VALUES (#{isbn13}, #{isbn}, #{userId}, #{readYn}, #{rating}, #{comnet}, #{reviewText}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            READ_YN = VALUES(READ_YN),
+            RATING = VALUES(RATING),
+            COMNET = VALUES(COMNET),
+            REVIEW_TEXT = VALUES(REVIEW_TEXT),
+            MOD_DT = NOW()
+    </insert>
+
+    <insert id="insertOrUpdateRead" parameterType="map">
+        <!-- Insert a simple read record or update READ_YN for existing (USER_ID, ISBN) -->
+        INSERT INTO MN_BK_RVW (ISBN13, ISBN, USER_ID, READ_YN, REG_DT, MOD_DT)
+        VALUES (#{isbn13}, #{isbn}, #{userId}, #{readYn}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            READ_YN = VALUES(READ_YN),
+            MOD_DT = NOW()
+    </insert>
+
+    <select id="selectStatuses" parameterType="map" resultType="map">
+        SELECT ISBN, ISBN13, READ_YN, RATING, COMNET, REVIEW_TEXT
+        FROM MN_BK_RVW
+        WHERE USER_ID = #{userId}
+        <choose>
+            <when test="isbns != null and isbns.size() &gt; 0 and isbns13 != null and isbns13.size() &gt; 0">
+                AND (
+                  ISBN IN
+                  <foreach item="isbn" collection="isbns" open="(" separator="," close=")">
+                    #{isbn}
+                  </foreach>
+                OR ISBN13 IN
+                  <foreach item="isbn13" collection="isbns13" open="(" separator="," close=")">
+                    #{isbn13}
+                  </foreach>
+                )
+            </when>
+            <when test="isbns != null and isbns.size() &gt; 0">
+                AND ISBN IN
+                <foreach item="isbn" collection="isbns" open="(" separator="," close=")">
+                  #{isbn}
+                </foreach>
+            </when>
+            <when test="isbns13 != null and isbns13.size() &gt; 0">
+                AND ISBN13 IN
+                <foreach item="isbn13" collection="isbns13" open="(" separator="," close=")">
+                  #{isbn13}
+                </foreach>
+            </when>
+            <otherwise>
+                <!-- No identifiers provided: make the query return no rows explicitly -->
+                AND 1 = 0
+            </otherwise>
+        </choose>
+    </select>
+
+    <delete id="deleteReview" parameterType="map">
+        DELETE FROM MN_BK_RVW
+        WHERE USER_ID = #{userId}
+        <choose>
+            <when test="isbn != null and isbn.trim().length() &gt; 0">
+                AND ISBN = #{isbn}
+            </when>
+            <when test="isbn13 != null and isbn13.trim().length() &gt; 0">
+                AND ISBN13 = #{isbn13}
+            </when>
+            <otherwise>
+                AND 1 = 0
+            </otherwise>
+        </choose>
+    </delete>
+
+</mapper>

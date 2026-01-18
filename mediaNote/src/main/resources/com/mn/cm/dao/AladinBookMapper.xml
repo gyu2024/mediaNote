@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mn.cm.dao.AladinBookMapper">
+    <insert id="insertAladinBook" parameterType="com.mn.cm.model.AladinBook">
+        INSERT INTO MN_BK_MST
+        (ISBN13, ISBN, TITLE, AUTHOR, PUBLISHER, PUB_DATE, DESCRIPTION, COVER, LINK, PRICE_STANDARD, PRICE_SALES, CATEGORY_NAME, CATEGORY_ID, CUSTOMER_REVIEW_RANK, SALES_POINT, ITEM_ID, MALL_TYPE)
+        VALUES
+        (#{isbn13}, #{isbn}, #{title}, #{author}, #{publisher}, #{pubDate}, #{description}, #{cover}, #{link}, #{priceStandard}, #{priceSales}, #{categoryName}, #{categoryId}, #{customerReviewRank}, #{salesPoint}, #{itemId}, #{mallType})
+        ON DUPLICATE KEY UPDATE MOD_DT=NOW()
+    </insert>
+
+    <select id="selectByIsbn" parameterType="string" resultType="com.mn.cm.model.AladinBook">
+        SELECT ISBN13, ISBN, TITLE, AUTHOR, PUBLISHER, PUB_DATE, DESCRIPTION, COVER, LINK, PRICE_STANDARD, PRICE_SALES, CATEGORY_NAME, CATEGORY_ID, CUSTOMER_REVIEW_RANK, SALES_POINT, ITEM_ID, MALL_TYPE, REG_DT, MOD_DT
+        FROM MN_BK_MST
+        WHERE ISBN = #{isbn}
+        LIMIT 1
+    </select>
+</mapper>

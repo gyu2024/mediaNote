@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mn.cm.dao.UserMasterMapper">
+
+    <resultMap id="UserMasterResult" type="com.mn.cm.model.UserMaster">
+        <id property="userId" column="USER_ID" />
+        <result property="email" column="EMAIL" />
+        <result property="nickname" column="NICKNAME" />
+        <result property="profileImage" column="PROFILE_IMAGE" />
+        <result property="regDt" column="REG_DT" />
+        <result property="modDt" column="MOD_DT" />
+        <result property="lastLogin" column="LAST_LOGIN" />
+    </resultMap>
+
+    <select id="selectByUserId" parameterType="String" resultMap="UserMasterResult">
+        SELECT USER_ID, EMAIL, NICKNAME, PROFILE_IMAGE, REG_DT, MOD_DT, LAST_LOGIN
+        FROM MN_USR_MST
+        WHERE USER_ID = #{userId}
+    </select>
+
+    <insert id="insertUserMaster" parameterType="com.mn.cm.model.UserMaster">
+        INSERT INTO MN_USR_MST (USER_ID, EMAIL, NICKNAME, PROFILE_IMAGE, REG_DT, MOD_DT, LAST_LOGIN)
+        VALUES (#{userId}, #{email}, #{nickname}, #{profileImage}, #{regDt}, #{modDt}, #{lastLogin})
+    </insert>
+
+    <update id="updateLastLogin" parameterType="com.mn.cm.model.UserMaster">
+        UPDATE MN_USR_MST
+        SET LAST_LOGIN = #{lastLogin}, NICKNAME = #{nickname}, PROFILE_IMAGE = #{profileImage}
+        WHERE USER_ID = #{userId}
+    </update>
+
+    <!-- combined insert/update for convenience (MySQL) -->
+    <insert id="insertOrUpdateLogin" parameterType="com.mn.cm.model.UserMaster">
+        INSERT INTO MN_USR_MST (USER_ID, EMAIL, NICKNAME, PROFILE_IMAGE, REG_DT, MOD_DT, LAST_LOGIN)
+        VALUES (#{userId}, #{email}, #{nickname}, #{profileImage}, #{regDt}, #{modDt}, #{lastLogin})
+        ON DUPLICATE KEY UPDATE
+          EMAIL = VALUES(EMAIL),
+          NICKNAME = VALUES(NICKNAME),
+          PROFILE_IMAGE = VALUES(PROFILE_IMAGE),
+          MOD_DT = VALUES(MOD_DT),
+          LAST_LOGIN = VALUES(LAST_LOGIN)
+    </insert>
+
+</mapper>
