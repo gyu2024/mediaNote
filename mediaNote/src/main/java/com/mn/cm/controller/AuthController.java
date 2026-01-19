@@ -14,6 +14,7 @@ import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import java.util.Date;
 
 import org.springframework.web.client.RestTemplate;
@@ -33,22 +34,45 @@ public class AuthController {
     private static final String KAKAO_REST_KEY = "952ba81cd2825efb0931e0e834209b58";
     // If your Kakao app has a client_secret (from Kakao developers settings), set it here; otherwise leave empty
     private static final String KAKAO_CLIENT_SECRET = "Kbsnb9vhoaJl5J2jrbvEwZcS8wTgvFkW";
-    // Changed from localhost to LAN IP so mobile devices on the same network can complete OAuth redirects
-    private static final String KAKAO_REDIRECT_URI = "http://192.168.1.106:8080/kakao/callback";
+    // Fallback redirect URI is now configurable via properties (see db.properties)
+    @Value("${kakao.redirect.uri.fallback}")
+    private String kakaoRedirectUriFallback;
 
     @Autowired
     private UserMasterDAO userMasterDAO;
 
     @GetMapping("/login/kakao")
-    public RedirectView kakaoLogin() {
+    public RedirectView kakaoLogin(HttpServletRequest request, @RequestParam(name = "returnUrl", required = false) String returnUrl) {
+        // Compute redirect URI dynamically from incoming request so the OAuth callback lands on the same host
+        String scheme = request.getScheme();
+        String host = request.getServerName();
+        int port = request.getServerPort();
+        String context = request.getContextPath();
+        String redirectUri;
+        try {
+            redirectUri = scheme + "://" + host + (port == 80 || port == 443 ? "" : ":" + port) + context + "/kakao/callback";
+        } catch (Exception e) {
+            redirectUri = kakaoRedirectUriFallback;
+        }
+
         String url = "https://kauth.kakao.com/oauth/authorize?response_type=code"
                 + "&client_id=" + URLEncoder.encode(KAKAO_REST_KEY, StandardCharsets.UTF_8)
-                + "&redirect_uri=" + URLEncoder.encode(KAKAO_REDIRECT_URI, StandardCharsets.UTF_8);
+                + "&redirect_uri=" + URLEncoder.encode(redirectUri, StandardCharsets.UTF_8);
+
+        // include a state parameter so we can restore returnUrl after callback (optional)
+        try {
+            if (returnUrl != null && !returnUrl.isEmpty()) {
+                String state = URLEncoder.encode(returnUrl, StandardCharsets.UTF_8);
+                url += "&state=" + state;
+            }
+        } catch (Exception e) { /* ignore state encoding errors */ }
+
         return new RedirectView(url);
     }
 
     @RequestMapping("/kakao/callback")
     public RedirectView kakaoCallback(@RequestParam(name = "code", required = false) String code,
+                                      @RequestParam(name = "state", required = false) String state,
                                       HttpServletRequest request) {
         HttpSession session = request.getSession();
 
@@ -61,6 +85,18 @@ public class AuthController {
             });
         } catch (Exception e) {
             System.out.println("[KAKAO CALLBACK] Failed to log request parameters: " + e.getMessage());
+        }
+
+        // Compute redirectUri based on the actual incoming request (must match the one used in authorize)
+        String scheme = request.getScheme();
+        String host = request.getServerName();
+        int port = request.getServerPort();
+        String context = request.getContextPath();
+        String computedRedirectUri;
+        try {
+            computedRedirectUri = scheme + "://" + host + (port == 80 || port == 443 ? "" : ":" + port) + context + "/kakao/callback";
+        } catch (Exception e) {
+            computedRedirectUri = kakaoRedirectUriFallback;
         }
 
         if (code != null) {
@@ -79,7 +115,7 @@ public class AuthController {
                 MultiValueMap<String, String> body = new LinkedMultiValueMap<>();
                 body.add("grant_type", "authorization_code");
                 body.add("client_id", KAKAO_REST_KEY);
-                body.add("redirect_uri", KAKAO_REDIRECT_URI);
+                body.add("redirect_uri", computedRedirectUri);
                 body.add("code", code);
                 if (KAKAO_CLIENT_SECRET != null && !KAKAO_CLIENT_SECRET.isEmpty()) {
                     body.add("client_secret", KAKAO_CLIENT_SECRET);
@@ -194,6 +230,29 @@ public class AuthController {
         }
 
         String ctx = request.getContextPath();
+        // If a state (returnUrl) was provided, validate it and redirect there on the same host (state could be absolute or path)
+        try {
+            if (state != null && !state.isEmpty()) {
+                String decoded = java.net.URLDecoder.decode(state, StandardCharsets.UTF_8.name());
+                // Allow only path-absolute (starting with '/') or same-origin absolute URLs
+                try {
+                    if (decoded.startsWith("/")) {
+                        return new RedirectView(decoded);
+                    }
+                    java.net.URL u = new java.net.URL(decoded);
+                    String reqOrigin = request.getScheme() + "://" + request.getServerName() + (request.getServerPort() == 80 || request.getServerPort() == 443 ? "" : ":" + request.getServerPort());
+                    String urlOrigin = u.getProtocol() + "://" + u.getHost() + (u.getPort() == -1 ? "" : ":" + u.getPort());
+                    if (reqOrigin.equalsIgnoreCase(urlOrigin)) {
+                        return new RedirectView(decoded);
+                    }
+                } catch (Exception e) {
+                    // not a valid absolute URL - ignore and fall back to index
+                }
+            }
+        } catch (Exception e) {
+            // fall back to default
+        }
+
         return new RedirectView(ctx + "/index.jsp");
     }
 

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mn.cm.dao.WishMapper">
+
+    <insert id="insertOrUpdateWish" parameterType="map">
+        <!-- Insert into MN_BK_WISH; enforce unique key (USER_ID, ISBN) by using ON DUPLICATE KEY UPDATE to be idempotent -->
+        INSERT INTO MN_BK_WISH (ISBN13, ISBN, USER_ID, REG_DT)
+        VALUES (#{isbn13}, #{isbn}, #{userId}, NOW())
+        ON DUPLICATE KEY UPDATE
+            REG_DT = VALUES(REG_DT)
+    </insert>
+
+    <delete id="deleteWish" parameterType="map">
+        DELETE FROM MN_BK_WISH
+        WHERE USER_ID = #{userId}
+        <choose>
+            <when test="isbn != null and isbn.trim().length() &gt; 0">
+                AND ISBN = #{isbn}
+            </when>
+            <when test="isbn13 != null and isbn13.trim().length() &gt; 0">
+                AND ISBN13 = #{isbn13}
+            </when>
+            <otherwise>
+                AND 1 = 0
+            </otherwise>
+        </choose>
+    </delete>
+
+    <select id="selectWishCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM MN_BK_WISH w
+        WHERE (
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND w.ISBN = #{isbn})
+            OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND w.ISBN13 = #{isbn13})
+        )
+    </select>
+
+    <select id="selectUserWishCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM MN_BK_WISH w
+        WHERE w.USER_ID = #{userId}
+        AND (
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND w.ISBN = #{isbn})
+            OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND w.ISBN13 = #{isbn13})
+        )
+    </select>
+
+</mapper>

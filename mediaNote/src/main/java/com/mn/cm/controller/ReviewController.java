@@ -78,14 +78,14 @@ public class ReviewController {
             if (payload.get("rating") != null) {
                 try { rating = Double.valueOf(String.valueOf(payload.get("rating"))); } catch (Exception e) { rating = null; }
             }
-            String comnet = payload.get("comment") != null ? String.valueOf(payload.get("comment")) : (payload.get("comnet") != null ? String.valueOf(payload.get("comnet")) : null);
+            String cmnt = payload.get("comment") != null ? String.valueOf(payload.get("comment")) : (payload.get("cmnt") != null ? String.valueOf(payload.get("cmnt")) : null);
             String reviewText = payload.get("text") != null ? String.valueOf(payload.get("text")) : null;
 
-            logger.info("[SAVE_REVIEW] request - parsedJson:{}, user:{}, isbn:{}, rating:{}, commentPresent:{}, textPresent:{}",
-                    parsedJson, userId, isbn, rating, (comnet!=null), (reviewText!=null));
+            logger.info("[SAVE_REVIEW] request - parsedJson:{}, user:{}, isbn:{}, rating:{}, cmntPresent:{}, textPresent:{}",
+                    parsedJson, userId, isbn, rating, (cmnt!=null), (reviewText!=null));
 
             // Persist review: pass both isbn and isbn13 so mapper columns are set correctly
-            reviewDAO.insertOrUpdateReview(userId, isbn, isbn13, rating, comnet, reviewText);
+            reviewDAO.insertOrUpdateReview(userId, isbn, isbn13, rating, cmnt, reviewText);
 
             result.put("status", "OK");
             return result;
@@ -145,11 +145,11 @@ public class ReviewController {
                 Map<String,Object> st = new HashMap<>();
                 st.put("readYn", r.get("READ_YN"));
                 st.put("rating", r.get("RATING"));
-                st.put("comnet", r.get("COMNET"));
+                st.put("cmnt", r.get("CMNT"));
                 st.put("reviewText", r.get("REVIEW_TEXT"));
                 // map under both identifiers so client can look up by either
                 if (isbnVal != null && !isbnVal.trim().isEmpty()) map.put(isbnVal, st);
-                if (isbn13Val != null && !isbn13Val.trim().isEmpty() && !isbn13Val.equals(isbnVal)) map.put(isbn13Val, st);
+                if (isbn13Val != null && isbn13Val.trim().length() > 0 && !isbn13Val.equals(isbnVal)) map.put(isbn13Val, st);
             }
             logger.debug("[STATUS] returning map keys={}", map.keySet());
              result.put("status", "OK");
@@ -209,7 +209,7 @@ public class ReviewController {
                 if (rows != null && rows.size() > 0) {
                     for (Map<String,Object> r : rows) {
                         Object ratingObj = r.get("RATING");
-                        Object comnetObj = r.get("COMNET");
+                        Object comnetObj = r.get("CMNT");
                         Object reviewTextObj = r.get("REVIEW_TEXT");
                         boolean hasRatingOrComment = (ratingObj != null) || (comnetObj != null && String.valueOf(comnetObj).trim().length() > 0) || (reviewTextObj != null && String.valueOf(reviewTextObj).trim().length() > 0);
                         if (hasRatingOrComment) {
@@ -269,6 +269,274 @@ public class ReviewController {
         }
     }
 
+    @PostMapping(value = "/vote", produces = "application/json")
+    @ResponseBody
+    public Map<String,Object> voteReview(HttpServletRequest request, HttpSession session) {
+        Map<String,Object> result = new HashMap<>();
+        try {
+            com.mn.cm.model.User u = (com.mn.cm.model.User) session.getAttribute("USER_SESSION");
+            if (u == null) { result.put("status","ERR"); result.put("message","NOT_LOGGED_IN"); return result; }
+            String userId = String.valueOf(u.getId());
+            String isbn = null; String isbn13 = null; String regDt = null; String action = null;
+            String contentType = request.getContentType();
+            boolean parsedJson = false;
+            try {
+                if (contentType != null && contentType.toLowerCase().contains("application/json")) {
+                    Map<String,Object> payload = objectMapper.readValue(request.getInputStream(), Map.class);
+                    if (payload.get("isbn") != null) isbn = String.valueOf(payload.get("isbn"));
+                    if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
+                    if (payload.get("regDt") != null) regDt = String.valueOf(payload.get("regDt"));
+                    if (payload.get("action") != null) action = String.valueOf(payload.get("action"));
+                    parsedJson = true;
+                }
+            } catch (Exception ex) { }
+            if (!parsedJson) {
+                if (request.getParameter("isbn") != null) isbn = request.getParameter("isbn");
+                if (request.getParameter("isbn13") != null) isbn13 = request.getParameter("isbn13");
+                if (request.getParameter("regDt") != null) regDt = request.getParameter("regDt");
+                if (request.getParameter("action") != null) action = request.getParameter("action");
+            }
+            if ((isbn == null || isbn.trim().length() == 0) && (isbn13 == null || isbn13.trim().length() == 0)) {
+                result.put("status","ERR"); result.put("message","MISSING_ISBN"); return result; }
+            if (regDt == null || regDt.trim().length() == 0) { result.put("status","ERR"); result.put("message","MISSING_REGDT"); return result; }
+            if (!"like".equals(action) && !"dislike".equals(action)) { result.put("status","ERR"); result.put("message","INVALID_ACTION"); return result; }
+
+            // server-side: check existing reaction for this user+review to prevent duplicate same-action votes
+            try {
+                Integer existing = reviewDAO.selectUserReaction(userId, isbn, isbn13, regDt);
+                if (existing != null) {
+                    String existingAction = (existing == 0) ? "like" : (existing == 1) ? "dislike" : null;
+                    if (existingAction != null && existingAction.equals(action)) {
+                        // Toggle off: user clicked same action again -> delete their reaction
+                        try {
+                            reviewDAO.deleteUserReaction(userId, isbn, isbn13, regDt);
+                            java.util.Map<String,Object> rowAfter = reviewDAO.selectReviewByKey(isbn, isbn13, regDt);
+                            Map<String,Object> dataAfter = new HashMap<>();
+                            if (rowAfter != null) {
+                                dataAfter.put("lkCnt", rowAfter.get("LK_CNT") != null ? rowAfter.get("LK_CNT") : rowAfter.get("lk_cnt") );
+                                dataAfter.put("dslkCnt", rowAfter.get("DSLK_CNT") != null ? rowAfter.get("DSLK_CNT") : rowAfter.get("dslk_cnt") );
+                            }
+                            result.put("status","OK"); result.put("data", dataAfter); return result;
+                        } catch (Exception ex) {
+                            logger.error("[VOTE] toggle-off delete failed", ex);
+                            result.put("status","ERR"); result.put("message","DELETE_FAILED"); return result;
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore and proceed to allow DAO to handle idempotency if needed
+                logger.info("[VOTE] existing reaction check failed: {}", ex.getMessage());
+            }
+
+            // Pass userId so DAO can record per-user reactions in MN_BK_LIKE
+            reviewDAO.voteReview(userId, isbn, isbn13, regDt, action);
+            java.util.Map<String,Object> row = reviewDAO.selectReviewByKey(isbn, isbn13, regDt);
+            Map<String,Object> data = new HashMap<>();
+            if (row != null) {
+                data.put("lkCnt", row.get("LK_CNT") != null ? row.get("LK_CNT") : row.get("lk_cnt") );
+                data.put("dslkCnt", row.get("DSLK_CNT") != null ? row.get("DSLK_CNT") : row.get("dslk_cnt") );
+            }
+            result.put("status","OK"); result.put("data", data); return result;
+        } catch (Exception ex) {
+            logger.error("[VOTE] error", ex);
+            result.put("status","ERR"); result.put("message", ex.getMessage()); return result;
+        }
+    }
+
+    // Public endpoint: list reviews for a book (recent first)
+    @PostMapping(value = "/list", produces = "application/json")
+    @ResponseBody
+    public Map<String,Object> listReviews(HttpServletRequest request) {
+        Map<String,Object> result = new HashMap<>();
+        try {
+            String isbn = null; String isbn13 = null; Integer limit = 10;
+            String contentType = request.getContentType();
+            boolean parsedJson = false;
+            try {
+                if (contentType != null && contentType.toLowerCase().contains("application/json")) {
+                    Map<String,Object> payload = objectMapper.readValue(request.getInputStream(), Map.class);
+                    if (payload.get("isbn") != null) isbn = String.valueOf(payload.get("isbn"));
+                    if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
+                    if (payload.get("limit") != null) {
+                        try { limit = Integer.valueOf(String.valueOf(payload.get("limit"))); } catch(Exception e){ }
+                    }
+                    parsedJson = true;
+                }
+            } catch (Exception ex) { }
+            if (!parsedJson) {
+                String pIsbn = request.getParameter("isbn");
+                String pIsbn13 = request.getParameter("isbn13");
+                String pLimit = request.getParameter("limit");
+                if (pIsbn != null && pIsbn.trim().length()>0) isbn = pIsbn.trim();
+                if (pIsbn13 != null && pIsbn13.trim().length()>0) isbn13 = pIsbn13.trim();
+                if (pLimit != null) {
+                    try { limit = Integer.valueOf(pLimit); } catch(Exception e) {}
+                }
+            }
+
+            java.util.List<java.util.Map<String,Object>> rows = reviewDAO.selectReviews(isbn, isbn13, limit);
+
+            // Convert database datetime types to strings (avoid Jackson LocalDateTime serialization issues)
+            try {
+                java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                for (java.util.Map<String,Object> r : rows) {
+                    if (r == null) continue;
+                    Object reg = r.get("REG_DT");
+                    if (reg == null) reg = r.get("reg_dt");
+                    if (reg != null) {
+                        try {
+                            if (reg instanceof java.time.LocalDateTime) {
+                                r.put("REG_DT", ((java.time.LocalDateTime)reg).format(dtf));
+                            } else if (reg instanceof java.sql.Timestamp) {
+                                java.sql.Timestamp ts = (java.sql.Timestamp) reg;
+                                r.put("REG_DT", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(ts.getTime())));
+                            } else if (reg instanceof java.util.Date) {
+                                r.put("REG_DT", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format((java.util.Date)reg));
+                            } else if (reg instanceof String) {
+                                // leave as-is
+                                r.put("REG_DT", String.valueOf(reg));
+                            } else {
+                                // fallback to toString
+                                r.put("REG_DT", String.valueOf(reg));
+                            }
+                        } catch (Exception ex) {
+                            // ensure we don't break the whole response
+                            try { r.put("REG_DT", String.valueOf(reg)); } catch (Exception ignore) {}
+                        }
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore; we'll still return rows even if formatting fails
+            }
+
+            result.put("status","OK");
+            result.put("data", rows);
+            return result;
+        } catch (Exception ex) {
+            logger.error("[LIST] error", ex);
+            result.put("status","ERR"); result.put("message",ex.getMessage()); return result;
+        }
+    }
+
+    // New: book-level summary endpoint (public)
+    @PostMapping(value = "/summary", produces = "application/json")
+    @ResponseBody
+    public Map<String,Object> bookSummary(HttpServletRequest request) {
+        Map<String,Object> result = new HashMap<>();
+        // Quick stdout probe so we can see a console line even when logging is filtered
+        System.out.println("[SUMMARY-STDOUT] invoked: " + request.getRequestURI() + " from " + request.getRemoteAddr());
+        // Log immediately on entry so we know the endpoint was invoked
+        logger.info("[SUMMARY] endpoint invoked: uri={}, remoteAddr={}, query={}", request.getRequestURI(), request.getRemoteAddr(), request.getQueryString());
+        try {
+            String isbn = null; String isbn13 = null;
+            String contentType = request.getContentType();
+            logger.info("[SUMMARY] contentType={}", contentType);
+            boolean parsedJson = false;
+            try {
+                if (contentType != null && contentType.toLowerCase().contains("application/json")) {
+                    Map<String,Object> payload = objectMapper.readValue(request.getInputStream(), Map.class);
+                    // support single-string keys
+                    if (payload.get("isbn") != null) isbn = String.valueOf(payload.get("isbn"));
+                    if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
+                    // also support arrays (isbns / isbns13) where client might send arrays
+                    try {
+                        if ((isbn == null || isbn.trim().length() == 0) && payload.get("isbns") instanceof java.util.List) {
+                            java.util.List l = (java.util.List) payload.get("isbns"); if (l.size()>0) isbn = String.valueOf(l.get(0));
+                        }
+                    } catch (Exception ignore) {}
+                    try {
+                        if ((isbn13 == null || isbn13.trim().length() == 0) && payload.get("isbns13") instanceof java.util.List) {
+                            java.util.List l2 = (java.util.List) payload.get("isbns13"); if (l2.size()>0) isbn13 = String.valueOf(l2.get(0));
+                        }
+                    } catch (Exception ignore) {}
+                    parsedJson = true;
+                    logger.info("[SUMMARY] parsed JSON payload: isbn={}, isbn13={}", isbn, isbn13);
+                }
+            } catch (Exception ex) { logger.info("[SUMMARY] json parse attempt failed: {}", ex.getMessage()); }
+            if (!parsedJson) {
+                String pIsbn = request.getParameter("isbn");
+                String pIsbn13 = request.getParameter("isbn13");
+                if (pIsbn != null && pIsbn.trim().length()>0) isbn = pIsbn.trim();
+                if (pIsbn13 != null && pIsbn13.trim().length()>0) isbn13 = pIsbn13.trim();
+                logger.info("[SUMMARY] parsed params: isbn={}, isbn13={}", isbn, isbn13);
+            }
+
+            java.util.Map<String,Object> row = reviewDAO.selectBookSummary(isbn, isbn13);
+            Map<String,Object> data = new HashMap<>();
+            if (row != null) {
+                Object avg = row.get("AVG_RATING") != null ? row.get("AVG_RATING") : row.get("avg_rating");
+                Object rCnt = row.get("RATING_CNT") != null ? row.get("RATING_CNT") : row.get("rating_cnt");
+                Object readCnt = row.get("READ_CNT") != null ? row.get("READ_CNT") : row.get("read_cnt");
+                // Prefer REVIEW_WITH_TEXT_CNT as the "likeCount" semantic requested: number of reviews that have CMNT or REVIEW_TEXT
+                Object reviewWithTextCnt = row.get("REVIEW_WITH_TEXT_CNT") != null ? row.get("REVIEW_WITH_TEXT_CNT") : row.get("review_with_text_cnt");
+                Object likeCnt = null;
+                if (reviewWithTextCnt != null) {
+                    likeCnt = reviewWithTextCnt;
+                } else {
+                    likeCnt = row.get("LIKE_CNT") != null ? row.get("LIKE_CNT") : row.get("like_cnt");
+                }
+
+                data.put("avgRating", avg != null ? avg : null);
+                data.put("ratingCount", rCnt != null ? rCnt : 0);
+                data.put("readCount", readCnt != null ? readCnt : 0);
+                data.put("likeCount", likeCnt != null ? likeCnt : 0);
+            } else {
+                data.put("avgRating", null);
+                data.put("ratingCount", 0);
+                data.put("readCount", 0);
+                data.put("likeCount", 0);
+            }
+            logger.info("[SUMMARY] returning data={}", data);
+            result.put("status","OK"); result.put("data", data); return result;
+        } catch (Exception ex) {
+            logger.error("[SUMMARY] error", ex);
+            result.put("status","ERR"); result.put("message",ex.getMessage()); return result;
+        }
+    }
+
+    @PostMapping(value = "/reaction", produces = "application/json")
+    @ResponseBody
+    public Map<String,Object> userReaction(HttpServletRequest request, HttpSession session) {
+        Map<String,Object> result = new HashMap<>();
+        logger.info("[REACTION] endpoint invoked: uri={}, remoteAddr={}, query={}", request.getRequestURI(), request.getRemoteAddr(), request.getQueryString());
+        try {
+            com.mn.cm.model.User u = (com.mn.cm.model.User) session.getAttribute("USER_SESSION");
+            if (u == null) { result.put("status","ERR"); result.put("message","NOT_LOGGED_IN"); return result; }
+            String userId = String.valueOf(u.getId());
+
+            String isbn = null; String isbn13 = null; String regDt = null;
+            String contentType = request.getContentType();
+            boolean parsedJson = false;
+            try {
+                if (contentType != null && contentType.toLowerCase().contains("application/json")) {
+                    Map<String,Object> payload = objectMapper.readValue(request.getInputStream(), Map.class);
+                    if (payload.get("isbn") != null) isbn = String.valueOf(payload.get("isbn"));
+                    if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
+                    if (payload.get("regDt") != null) regDt = String.valueOf(payload.get("regDt"));
+                    parsedJson = true;
+                    logger.info("[REACTION] parsed JSON payload: isbn={}, isbn13={}, regDt={}", isbn, isbn13, regDt);
+                }
+            } catch (Exception ex) { logger.info("[REACTION] json parse failed: {}", ex.getMessage()); }
+            if (!parsedJson) {
+                if (request.getParameter("isbn") != null) isbn = request.getParameter("isbn");
+                if (request.getParameter("isbn13") != null) isbn13 = request.getParameter("isbn13");
+                if (request.getParameter("regDt") != null) regDt = request.getParameter("regDt");
+                logger.info("[REACTION] parsed params: isbn={}, isbn13={}, regDt={}", isbn, isbn13, regDt);
+            }
+
+            if ((regDt == null || regDt.trim().length() == 0) ) { result.put("status","ERR"); result.put("message","MISSING_REGDT"); return result; }
+
+            Integer reaction = reviewDAO.selectUserReaction(userId, isbn, isbn13, regDt);
+            Map<String,Object> data = new HashMap<>();
+            data.put("reaction", reaction);
+            result.put("status","OK"); result.put("data", data);
+            return result;
+        } catch (Exception ex) {
+            logger.error("[REACTION] error", ex);
+            result.put("status","ERR"); result.put("message", ex.getMessage()); return result;
+        }
+    }
+
     // helper: rough ISBN heuristic (10 or 13 digits, optionally with hyphens or an ending X)
     private boolean isLikelyIsbn(String s) {
         if (s == null) return false;
@@ -277,4 +545,5 @@ public class ReviewController {
         if (t.length() == 13) return t.matches("^[0-9]{13}$");
         return false;
     }
+
 }

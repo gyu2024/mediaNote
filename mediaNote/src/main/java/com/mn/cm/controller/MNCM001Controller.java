@@ -41,8 +41,9 @@ public class MNCM001Controller {
         urlBuilder.append("&QueryType=").append(target != null && target.equals("author") ? "Author" : "Title");
         urlBuilder.append("&MaxResults=10");
         urlBuilder.append("&start=1");
-        urlBuilder.append("&Cover=Small");
+        urlBuilder.append("&Cover=Big");
         urlBuilder.append("&SearchTarget=Book");
+        urlBuilder.append("&Sort=SalesPoint");
         urlBuilder.append("&output=js");
         urlBuilder.append("&Version=20131101");
 		/*
@@ -157,4 +158,185 @@ public class MNCM001Controller {
             return "[]";
         }
     }
+
+    // New endpoint: bestseller list
+    @RequestMapping(value="/bestseller", produces="application/json; charset=UTF-8")
+    @ResponseBody
+    public String bestseller(HttpServletRequest request) {
+        System.out.println("[알라딘API][베스트셀러] 요청 시작");
+        String searchTarget = request.getParameter("SearchTarget"); // optional: Book, Foreign, Music, DVD, Used, eBook, All
+        String start = request.getParameter("Start");
+        String maxResults = request.getParameter("MaxResults");
+        String categoryId = request.getParameter("CategoryId");
+        String year = request.getParameter("Year");
+        String month = request.getParameter("Month");
+        String week = request.getParameter("Week");
+
+        String ttbKey = "ttbomingyu2010001"; // 실제 키로 교체
+        // parse start/max early to allow DB fallback when Start is large
+        int startInt = (int)(Math.random() * 90) + 1;
+        int maxInt = 10;
+
+        // If start beyond API limit (historically ~490), return DB fallback directly to avoid useless API call
+        if (startInt > 490) {
+            try {
+                int offset = Math.max(0, startInt - 1);
+                java.util.List<AladinBook> list = aladinBookDAO.selectList(offset, maxInt);
+                JSONArray books = new JSONArray();
+                if (list != null && !list.isEmpty()) {
+                    for (AladinBook ab : list) {
+                        JSONObject b = new JSONObject();
+                        b.put("title", ab.getTitle());
+                        b.put("author", ab.getAuthor());
+                        b.put("publisher", ab.getPublisher());
+                        b.put("cover", ab.getCover());
+                        b.put("pubDate", ab.getPubDate());
+                        b.put("isbn", ab.getIsbn());
+                        b.put("isbn13", ab.getIsbn13());
+                        books.put(b);
+                    }
+                }
+                return books.toString();
+            } catch (Exception ex) {
+                ex.printStackTrace();
+                return "[]";
+            }
+        }
+
+        String apiUrl = "https://www.aladin.co.kr/ttb/api/ItemList.aspx"; // Product List API
+        StringBuilder urlBuilder = new StringBuilder(apiUrl);
+        urlBuilder.append("?ttbkey=").append(ttbKey);
+        urlBuilder.append("&QueryType=Bestseller");
+        // Only include SearchTarget if provided, otherwise default to Book
+        urlBuilder.append("&SearchTarget=").append(searchTarget != null && searchTarget.length() > 0 ? searchTarget : "Book");
+        urlBuilder.append("&output=js");
+        urlBuilder.append("&Cover=Big");
+        urlBuilder.append("&Version=20131101");
+        // include parsed start/max
+        urlBuilder.append("&Start=").append(startInt);
+        urlBuilder.append("&MaxResults=").append(maxInt);
+        // optional CategoryId/year/month/week
+        if (categoryId != null && categoryId.matches("\\d+")) urlBuilder.append("&CategoryId=").append(categoryId);
+        if (year != null && month != null && week != null && year.matches("\\d+") && month.matches("\\d+") && week.matches("\\d+")) {
+            urlBuilder.append("&Year=").append(year).append("&Month=").append(month).append("&Week=").append(week);
+        }
+
+        String requestUrl = urlBuilder.toString();
+        System.out.println("[알라딘API][베스트셀러] 요청 URL: " + requestUrl);
+
+        try {
+            RestTemplate restTemplate = new RestTemplate();
+            restTemplate.getMessageConverters().add(0, new StringHttpMessageConverter(StandardCharsets.UTF_8));
+            String result = restTemplate.getForObject(requestUrl, String.class);
+            System.out.println("[알라딘API][베스트셀러] 응답 수신 (len=" + (result!=null?result.length():0) + ")");
+            JSONObject json = new JSONObject(result);
+            JSONArray items = json.getJSONArray("item");
+            JSONArray books = new JSONArray();
+
+            for (int i = 0; i < items.length(); i++) {
+                JSONObject item = items.getJSONObject(i);
+                JSONObject book = new JSONObject();
+                String title = item.optString("title");
+                String author = item.optString("author");
+                String publisher = item.optString("publisher");
+                String cover = item.optString("cover");
+                String pubDate = item.optString("pubDate");
+                String isbn13 = item.optString("isbn13");
+                String isbn = item.optString("isbn");
+                if (isbn13 != null) isbn13 = isbn13.replaceAll("[^0-9Xx]", "");
+                if (isbn == null || isbn.trim().isEmpty()) {
+                    if (isbn13 != null && !isbn13.trim().isEmpty()) isbn = isbn13;
+                } else {
+                    isbn = isbn.replaceAll("[^0-9Xx]", "");
+                }
+                String link = item.optString("link");
+                int priceStandard = item.optInt("priceStandard", 0);
+                int priceSales = item.optInt("priceSales", 0);
+                String categoryName = item.optString("categoryName");
+                String categoryIdStr = item.optString("categoryId");
+                int customerReviewRank = item.optInt("customerReviewRank", 0);
+                int salesPoint = item.optInt("salesPoint", 0);
+                int itemId = item.optInt("itemId", 0);
+                String mallType = item.optString("mallType");
+                String description = item.optString("description");
+
+                book.put("title", title);
+                book.put("author", author);
+                book.put("publisher", publisher);
+                book.put("cover", cover);
+                book.put("pubDate", pubDate);
+                book.put("isbn", isbn);
+                book.put("isbn13", isbn13);
+                books.put(book);
+
+                AladinBook bookEntity = new AladinBook();
+                bookEntity.setIsbn13(isbn13);
+                bookEntity.setIsbn(isbn);
+                bookEntity.setTitle(title);
+                bookEntity.setAuthor(author);
+                bookEntity.setPublisher(publisher);
+                bookEntity.setPubDate(pubDate);
+                bookEntity.setDescription(description);
+                bookEntity.setCover(cover);
+                bookEntity.setLink(link);
+                bookEntity.setPriceStandard(priceStandard);
+                bookEntity.setPriceSales(priceSales);
+                bookEntity.setCategoryName(categoryName);
+                bookEntity.setCategoryId(categoryIdStr);
+                bookEntity.setCustomerReviewRank(customerReviewRank);
+                bookEntity.setSalesPoint(salesPoint);
+                bookEntity.setItemId(itemId);
+                bookEntity.setMallType(mallType);
+
+                try {
+                    aladinBookDAO.insert(bookEntity);
+                } catch (com.mn.cm.dao.DuplicateIsbnException dupEx) {
+                    System.out.println("[알라딘API][베스트셀러] 중복 ISBN으로 스킵: " + dupEx.getMessage());
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            }
+
+            // DB fallback: if no items returned and start <= 490, query local DB
+            if (items.length() == 0) {
+                System.out.println("[알라딘API][베스트셀러] API 반환 아이템이 없습니다. DB에서 대체 조회 시도합니다.");
+                try {
+                    int startIntFallback = 1;
+                    int maxIntFallback = 10;
+                    try { if (start != null && start.matches("\\d+")) startIntFallback = Integer.parseInt(start); } catch (Exception e) {}
+                    try { if (maxResults != null && maxResults.matches("\\d+")) maxIntFallback = Integer.parseInt(maxResults); } catch (Exception e) {}
+                    // Aladin API historically limits Start to ~490; if requested start beyond that or API returned empty, use DB fallback
+                    int offset = Math.max(0, startIntFallback - 1);
+                    java.util.List<AladinBook> list = aladinBookDAO.selectList(offset, maxIntFallback);
+                    if (list != null && !list.isEmpty()) {
+                        for (AladinBook ab : list) {
+                            JSONObject b = new JSONObject();
+                            b.put("title", ab.getTitle());
+                            b.put("author", ab.getAuthor());
+                            b.put("publisher", ab.getPublisher());
+                            b.put("cover", ab.getCover());
+                            b.put("pubDate", ab.getPubDate());
+                            b.put("isbn", ab.getIsbn());
+                            b.put("isbn13", ab.getIsbn13());
+                            books.put(b);
+                        }
+                        return books.toString();
+                    } else {
+                        System.out.println("[알라딘API][베스트셀러] DB에도 결과 없음");
+                        return books.toString();
+                    }
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                    return books.toString();
+                }
+            }
+
+            return books.toString();
+        } catch (Exception e) {
+            System.out.println("[알라딘API][베스트셀러] 예외 발생: " + e.getMessage());
+            e.printStackTrace();
+            return "[]";
+        }
+    }
+
 }

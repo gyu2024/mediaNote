@@ -15,4 +15,11 @@
         WHERE ISBN = #{isbn}
         LIMIT 1
     </select>
+
+    <select id="selectList" parameterType="map" resultType="com.mn.cm.model.AladinBook">
+        SELECT ISBN13 as isbn13, ISBN as isbn, TITLE as title, AUTHOR as author, PUBLISHER as publisher, PUB_DATE as pubDate, DESCRIPTION as description, COVER as cover, LINK as link, PRICE_STANDARD as priceStandard, PRICE_SALES as priceSales, CATEGORY_NAME as categoryName, CATEGORY_ID as categoryId, CUSTOMER_REVIEW_RANK as customerReviewRank, SALES_POINT as salesPoint, ITEM_ID as itemId, MALL_TYPE as mallType, REG_DT as regDt, MOD_DT as modDt
+        FROM MN_BK_MST
+        ORDER BY SALES_POINT DESC, REG_DT DESC
+        LIMIT #{offset}, #{limit}
+    </select>
 </mapper>

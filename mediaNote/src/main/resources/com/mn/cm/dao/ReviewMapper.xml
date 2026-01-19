@@ -4,12 +4,12 @@
 
     <insert id="insertOrUpdateReview" parameterType="map">
         <!-- Use INSERT ... ON DUPLICATE KEY UPDATE to upsert by unique (USER_ID, ISBN) -->
-        INSERT INTO MN_BK_RVW (ISBN13, ISBN, USER_ID, READ_YN, RATING, COMNET, REVIEW_TEXT, REG_DT, MOD_DT)
-        VALUES (#{isbn13}, #{isbn}, #{userId}, #{readYn}, #{rating}, #{comnet}, #{reviewText}, NOW(), NOW())
+        INSERT INTO MN_BK_RVW (ISBN13, ISBN, USER_ID, READ_YN, RATING, CMNT, REVIEW_TEXT, REG_DT, MOD_DT)
+        VALUES (#{isbn13}, #{isbn}, #{userId}, #{readYn}, #{rating}, #{cmnt}, #{reviewText}, NOW(), NOW())
         ON DUPLICATE KEY UPDATE
             READ_YN = VALUES(READ_YN),
             RATING = VALUES(RATING),
-            COMNET = VALUES(COMNET),
+            CMNT = VALUES(CMNT),
             REVIEW_TEXT = VALUES(REVIEW_TEXT),
             MOD_DT = NOW()
     </insert>
@@ -24,7 +24,7 @@
     </insert>
 
     <select id="selectStatuses" parameterType="map" resultType="map">
-        SELECT ISBN, ISBN13, READ_YN, RATING, COMNET, REVIEW_TEXT
+        SELECT ISBN, ISBN13, READ_YN, RATING, CMNT, REVIEW_TEXT
         FROM MN_BK_RVW
         WHERE USER_ID = #{userId}
         <choose>
@@ -59,6 +59,56 @@
         </choose>
     </select>
 
+    <select id="selectReviews" parameterType="map" resultType="map">
+        <!-- public reviews for a book: include nickname and like/dislike counts from MN_BK_LIKE (computed) -->
+        SELECT r.RATING as RATING, r.CMNT as CMNT, r.REVIEW_TEXT as REVIEW_TEXT, r.REG_DT as REG_DT,
+               -- compute counts from MN_BK_LIKE
+               (SELECT COUNT(*) FROM MN_BK_LIKE l WHERE l.RVW_ID = r.RVW_ID AND l.LIKE_TYPE = 0) AS LK_CNT,
+               (SELECT COUNT(*) FROM MN_BK_LIKE l WHERE l.RVW_ID = r.RVW_ID AND l.LIKE_TYPE = 1) AS DSLK_CNT,
+               m.NICKNAME as NICKNAME
+        FROM MN_BK_RVW r
+        LEFT JOIN MN_USR_MST m ON r.USER_ID = m.USER_ID
+        WHERE (
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND r.ISBN = #{isbn})
+            OR
+            (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND r.ISBN13 = #{isbn13})
+        )
+        AND (
+            r.RATING IS NOT NULL
+            OR (r.CMNT IS NOT NULL AND LENGTH(TRIM(r.CMNT)) &gt; 0)
+            OR (r.REVIEW_TEXT IS NOT NULL AND LENGTH(TRIM(r.REVIEW_TEXT)) &gt; 0)
+        )
+        ORDER BY r.REG_DT DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+        </if>
+    </select>
+
+    <!-- New: book-level summary (average rating, rating count, read count, like count) -->
+    <select id="selectBookSummary" parameterType="map" resultType="map">
+        SELECT
+            AVG(r.RATING) AS AVG_RATING,
+            SUM(CASE WHEN r.RATING IS NOT NULL THEN 1 ELSE 0 END) AS RATING_CNT,
+            SUM(CASE WHEN r.READ_YN = 'Y' THEN 1 ELSE 0 END) AS READ_CNT,
+            -- total likes across all reviews for this book
+            (
+                SELECT COUNT(*) FROM MN_BK_LIKE l
+                JOIN MN_BK_RVW r2 ON l.RVW_ID = r2.RVW_ID
+                WHERE l.LIKE_TYPE = 0
+                AND (
+                    (#{isbn} IS NOT NULL AND #{isbn} != '' AND r2.ISBN = #{isbn})
+                    OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND r2.ISBN13 = #{isbn13})
+                )
+            ) AS LIKE_CNT,
+            -- count of reviews for this book that contain a comment or review text
+            SUM(CASE WHEN (r.CMNT IS NOT NULL AND LENGTH(TRIM(r.CMNT)) > 0) OR (r.REVIEW_TEXT IS NOT NULL AND LENGTH(TRIM(r.REVIEW_TEXT)) > 0) THEN 1 ELSE 0 END) AS REVIEW_WITH_TEXT_CNT
+        FROM MN_BK_RVW r
+        WHERE (
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND r.ISBN = #{isbn})
+            OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND r.ISBN13 = #{isbn13})
+        )
+    </select>
+
     <delete id="deleteReview" parameterType="map">
         DELETE FROM MN_BK_RVW
         WHERE USER_ID = #{userId}
@@ -74,5 +124,63 @@
             </otherwise>
         </choose>
     </delete>
+
+    <update id="voteReview" parameterType="map">
+        <!-- Record per-user like/dislike in MN_BK_LIKE only. Aggregates are computed on-read from MN_BK_LIKE. -->
+        INSERT INTO MN_BK_LIKE (RVW_ID, USER_ID, LIKE_TYPE, REG_DT)
+        SELECT r.RVW_ID, #{userId}, (CASE WHEN #{action} = 'like' THEN 0 ELSE 1 END), NOW()
+        FROM MN_BK_RVW r
+        WHERE (
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND r.ISBN = #{isbn})
+            OR
+            (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND r.ISBN13 = #{isbn13})
+        )
+        AND r.REG_DT = STR_TO_DATE(#{regDt}, '%Y-%m-%d %H:%i:%s')
+        ON DUPLICATE KEY UPDATE
+            LIKE_TYPE = VALUES(LIKE_TYPE),
+            REG_DT = VALUES(REG_DT);
+    </update>
+
+    <select id="selectReviewByKey" parameterType="map" resultType="map">
+        SELECT RATING as RATING, CMNT as CMNT, REVIEW_TEXT as REVIEW_TEXT, REG_DT as REG_DT,
+               (SELECT COUNT(*) FROM MN_BK_LIKE l WHERE l.RVW_ID = rv.RVW_ID AND l.LIKE_TYPE = 0) AS LK_CNT,
+               (SELECT COUNT(*) FROM MN_BK_LIKE l WHERE l.RVW_ID = rv.RVW_ID AND l.LIKE_TYPE = 1) AS DSLK_CNT,
+               USER_ID as USER_ID
+        FROM MN_BK_RVW rv
+        WHERE (
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND ISBN = #{isbn})
+            OR
+            (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND ISBN13 = #{isbn13})
+        )
+        AND REG_DT = STR_TO_DATE(#{regDt}, '%Y-%m-%d %H:%i:%s')
+        LIMIT 1
+    </select>
+
+    <!-- Return existing LIKE_TYPE (0 or 1) for a given user and review identified by ISBN/ISBN13 + REG_DT. Returns NULL if not exists. -->
+    <select id="selectUserReaction" parameterType="map" resultType="int" >
+        SELECT l.LIKE_TYPE
+        FROM MN_BK_LIKE l
+        JOIN MN_BK_RVW r ON l.RVW_ID = r.RVW_ID
+        WHERE l.USER_ID = #{userId}
+        AND (
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND r.ISBN = #{isbn})
+            OR
+            (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND r.ISBN13 = #{isbn13})
+        )
+        AND r.REG_DT = STR_TO_DATE(#{regDt}, '%Y-%m-%d %H:%i:%s')
+        LIMIT 1
+    </select>
+
+   <delete id="deleteUserReaction" parameterType="map">
+    	DELETE l 
+    	FROM MN_BK_LIKE l
+    	JOIN MN_BK_RVW r ON l.RVW_ID = r.RVW_ID
+    	WHERE l.USER_ID = #{userId}
+    	AND r.REG_DT = STR_TO_DATE(#{regDt}, '%Y-%m-%d %H:%i:%s')
+    	AND (
+    	    (#{isbn} IS NOT NULL AND #{isbn} != '' AND r.ISBN = #{isbn})
+   	     OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND r.ISBN13 = #{isbn13})
+   	 )
+	</delete>
 
 </mapper>
