@@ -116,4 +116,13 @@ public class ReviewDAO {
         params.put("regDt", (regDt != null) ? regDt : "");
         sqlSession.delete("com.mn.cm.dao.ReviewMapper.deleteUserReaction", params);
     }
+
+    // New: fetch read items for a user with optional pagination
+    public java.util.List<java.util.Map<String,Object>> selectReadByUser(String userId, Integer offset, Integer limit) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("userId", (userId != null) ? userId : "");
+        params.put("offset", (offset != null) ? offset : 0);
+        params.put("limit", (limit != null) ? limit : null);
+        return sqlSession.selectList("com.mn.cm.dao.ReviewMapper.selectReadByUser", params);
+    }
 }

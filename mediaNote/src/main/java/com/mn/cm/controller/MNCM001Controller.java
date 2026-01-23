@@ -175,7 +175,7 @@ public class MNCM001Controller {
         String ttbKey = "ttbomingyu2010001"; // 실제 키로 교체
         // parse start/max early to allow DB fallback when Start is large
         int startInt = (int)(Math.random() * 90) + 1;
-        int maxInt = 10;
+        int maxInt = 20;
 
         // If start beyond API limit (historically ~490), return DB fallback directly to avoid useless API call
         if (startInt > 490) {
@@ -212,6 +212,7 @@ public class MNCM001Controller {
         urlBuilder.append("&output=js");
         urlBuilder.append("&Cover=Big");
         urlBuilder.append("&Version=20131101");
+        //urlBuilder.append("&CategoryId=2105");
         // include parsed start/max
         urlBuilder.append("&Start=").append(startInt);
         urlBuilder.append("&MaxResults=").append(maxInt);

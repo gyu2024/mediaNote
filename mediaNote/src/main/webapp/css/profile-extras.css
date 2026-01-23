@@ -1,0 +1,124 @@
+/* profile-extras.css
+   Scoped styles for profile.jsp additions. Keeps rules tied to #myLnk to avoid touching existing CSS.
+*/
+
+#myLnk.mypageLnkBox {
+  margin: 20px 0 32px;
+  padding: 16px;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border: 1px solid rgba(0,0,0,0.04);
+}
+
+#myLnk .etcLnk ul,
+#myLnk .servLnk ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#myLnk .etcLnk ul li {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+#myLnk .etcLnk a,
+#myLnk .etcLnk .txt {
+  color: #333;
+  text-decoration: none;
+}
+
+#myLnk .etcLnk .tipBox {
+  display: inline-block;
+  background: #fff9e6;
+  border-radius: 4px;
+  color: #8a6d00;
+  padding: 3px 6px;
+  margin-right: 8px;
+  font-size: 12px;
+  vertical-align: middle;
+  border: 1px solid rgba(138,109,0,0.08);
+}
+
+/* service links layout */
+#myLnk .servLnk {
+  margin-top: 12px;
+}
+
+#myLnk .servLnk ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+#myLnk .servLnk ul li {
+  flex: 1 0 120px; /* grow, don't shrink below 120px */
+  max-width: 160px;
+}
+
+#myLnk .servLnk .lnk {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 8px;
+  text-decoration: none;
+  background: #ffffff; /* white background for clean look */
+  color: #333; /* dark text */
+  border: 1px solid #ececec;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+}
+
+#myLnk .servLnk .lnk:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+  border-color: rgba(0,0,0,0.06);
+}
+
+#myLnk .servLnk .lnk:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(0,0,0,0.04);
+}
+
+#myLnk .servLnk .ico {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 36px;
+}
+
+#myLnk .servLnk .txt {
+  font-size: 13px;
+  line-height: 1.1;
+}
+
+/* accessibility: ensure SVGs inherit color where appropriate */
+#myLnk .servLnk .ico svg {
+  width: 36px;
+  height: 36px;
+  display: block;
+}
+
+/* Force svg shapes inside the white buttons to use the current text color so icons are visible on white */
+#myLnk .servLnk .lnk svg,
+#myLnk .servLnk .lnk svg path,
+#myLnk .servLnk .lnk svg circle,
+#myLnk .servLnk .lnk svg rect,
+#myLnk .servLnk .lnk svg g {
+  stroke: currentColor !important;
+}
+
+/* smaller screens: tighter grid */
+@media (max-width: 760px) {
+  #myLnk .servLnk ul { gap: 8px; }
+  #myLnk .servLnk ul li { flex: 1 0 28%; max-width: none; }
+}
+
+@media (max-width: 420px) {
+  #myLnk .servLnk ul { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  #myLnk .servLnk .lnk { padding: 8px; }
+  #myLnk .etcLnk ul li { font-size: 12px; }
+}

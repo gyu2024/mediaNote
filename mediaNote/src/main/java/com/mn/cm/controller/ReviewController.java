@@ -6,6 +6,8 @@ import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 
 import jakarta.servlet.http.HttpSession;
 import jakarta.servlet.http.HttpServletRequest;
@@ -544,6 +546,54 @@ public class ReviewController {
         if (t.length() == 10) return t.matches("^[0-9]{9}[0-9Xx]$");
         if (t.length() == 13) return t.matches("^[0-9]{13}$");
         return false;
+    }
+
+    // New: return logged-in user's read items (for /review/my)
+    @RequestMapping(value = "/my", method = {RequestMethod.GET, RequestMethod.POST}, produces = "application/json")
+    @ResponseBody
+    public Map<String,Object> myReadItems(HttpSession session, HttpServletRequest request, @RequestParam(value = "offset", required = false) Integer offset, @RequestParam(value = "limit", required = false) Integer limit) {
+        Map<String,Object> result = new HashMap<>();
+        try {
+            logger.info("[MY] invoked via {} from {}", request.getMethod(), request.getRemoteAddr());
+             com.mn.cm.model.User u = (com.mn.cm.model.User) session.getAttribute("USER_SESSION");
+             if (u == null) { result.put("status","ERR"); result.put("message","NOT_LOGGED_IN"); return result; }
+             String userId = String.valueOf(u.getId());
+            if (offset == null) offset = 0;
+            if (limit == null) limit = 200;
+            java.util.List<java.util.Map<String,Object>> rows = reviewDAO.selectReadByUser(userId, offset, limit);
+            // normalize datetime fields to string similar to other endpoints
+            try {
+                java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                for (java.util.Map<String,Object> r : rows) {
+                    if (r == null) continue;
+                    Object reg = r.get("REG_DT");
+                    if (reg == null) reg = r.get("reg_dt");
+                    if (reg != null) {
+                        try {
+                            if (reg instanceof java.time.LocalDateTime) {
+                                r.put("REG_DT", ((java.time.LocalDateTime)reg).format(dtf));
+                            } else if (reg instanceof java.sql.Timestamp) {
+                                java.sql.Timestamp ts = (java.sql.Timestamp) reg;
+                                r.put("REG_DT", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(ts.getTime())));
+                            } else if (reg instanceof java.util.Date) {
+                                r.put("REG_DT", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format((java.util.Date)reg));
+                            } else if (reg instanceof String) {
+                                r.put("REG_DT", String.valueOf(reg));
+                            } else {
+                                r.put("REG_DT", String.valueOf(reg));
+                            }
+                        } catch (Exception ex) {
+                            try { r.put("REG_DT", String.valueOf(reg)); } catch(Exception ignore) {}
+                        }
+                    }
+                }
+            } catch (Exception ex) { /* ignore */ }
+
+            result.put("status","OK"); result.put("data", rows); return result;
+        } catch (Exception ex) {
+            logger.error("[MY] error", ex);
+            result.put("status","ERR"); result.put("message",ex.getMessage()); return result;
+        }
     }
 
 }

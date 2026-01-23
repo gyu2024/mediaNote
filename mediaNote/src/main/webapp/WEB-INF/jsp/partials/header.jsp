@@ -510,7 +510,7 @@
         <span style="font-size:11px;">알림</span>
     </a>
 
-    <a href="#" data-action="profile" aria-label="내정보"
+    <a href="<%= request.getContextPath() %>/profile.jsp" data-action="profile" aria-label="내정보"
        style="display:flex;flex-direction:column;align-items:center;justify-content:center;color:#374151;text-decoration:none;width:56px;height:56px;border-radius:12px;transition:background 120ms ease,color 120ms ease;">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <circle cx="12" cy="8" r="3" stroke="currentColor" stroke-width="1.2"/>
@@ -541,6 +541,25 @@
             }
             // initialize default appearance
             resetStyles();
+
+            // Capture-phase handler for profile link: if it has a real href, force navigation as a fallback
+            try {
+                var profileAnchor = footer.querySelector('a[data-action="profile"]');
+                if (profileAnchor) {
+                    profileAnchor.addEventListener('click', function(e){
+                        try {
+                            var hrefAttr = this.getAttribute('href');
+                            console.debug('[HEADER] profile click captured; href=', hrefAttr, ' defaultPrevented=', e.defaultPrevented);
+                            if (hrefAttr && hrefAttr.trim() !== '#') {
+                                // schedule a forced navigation in the next macrotask to bypass other preventDefault handlers
+                                setTimeout(function(){ try { window.location.href = hrefAttr; } catch(err) {} }, 0);
+                                // don't preventDefault here so normal navigation may proceed; the timeout ensures navigation even if another handler cancels it
+                            }
+                        } catch (err) { console.error('[HEADER] profile click handler error', err); }
+                    }, true); // use capture to run before other listeners
+                }
+            } catch (e) { /* ignore */ }
+
             footer.addEventListener('click', function(e){
                 var a = e.target.closest('a[data-action]');
                 if (!a) return;
@@ -549,6 +568,16 @@
                 if (act === 'home') {
                     return; // let the browser follow the href
                 }
+
+                // If the anchor has a real href (not '#'), allow normal navigation
+                try {
+                    var hrefAttr = a.getAttribute('href');
+                    if (hrefAttr && hrefAttr.trim() !== '#') {
+                        // let browser navigate to the href
+                        return;
+                    }
+                } catch (e) { /* ignore and fall back to client handling */ }
+
                 e.preventDefault();
                 resetStyles();
                 // uniform active appearance for any non-navigation footer button

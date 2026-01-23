@@ -74,6 +74,11 @@
                 <label class="mn-label" for="rvw_text">감 상 평</label>
                 <textarea id="rvw_text" placeholder="감상평을 입력하세요 (생략 가능)" maxlength="2000" class="mn-textarea"></textarea>
             </div>
+            <!-- hidden inputs to hold item identifiers for modal actions -->
+            <input type="hidden" id="rvw_item_isbn" value="" />
+            <input type="hidden" id="rvw_item_isbn10" value="" />
+            <input type="hidden" id="rvw_item_title" value="" />
+            <input type="hidden" id="rvw_item_author" value="" />
         </section>
         <footer class="mn-modal-footer">
             <button id="rvw_cancel" class="mn-btn mn-btn-secondary" type="button">취소</button>
@@ -89,6 +94,49 @@ $(document).ready(function() {
     const $searchForm = $('#searchForm');
     const $mediaType = $('#mediaType');
     const $query = $('#query');
+
+    // Helper: robustly extract a status object for a given item from the response map
+    function findStatusForItem(respData, item) {
+        try {
+            if (!respData) return null;
+            // If respData is an array, try to match by isbn/isbn13
+            if (Array.isArray(respData)) {
+                for (var i = 0; i < respData.length; i++) {
+                    var v = respData[i];
+                    if (!v) continue;
+                    if (item.isbn && (v.isbn === item.isbn || v.ISBN === item.isbn)) return v;
+                    if (item.isbn13 && (v.isbn13 === item.isbn13 || v.ISBN13 === item.isbn13)) return v;
+                }
+                return respData.length > 0 ? respData[0] : null;
+            }
+            // If it's an object keyed by ISBN/ISBN13, try direct lookup
+            if (typeof respData === 'object') {
+                if (item.isbn && respData[item.isbn]) return respData[item.isbn];
+                if (item.isbn13 && respData[item.isbn13]) return respData[item.isbn13];
+                // fallback: iterate values and attempt to match fields inside
+                for (var k in respData) {
+                    if (!respData.hasOwnProperty(k)) continue;
+                    var v = respData[k];
+                    if (!v) continue;
+                    try {
+                        if (item.isbn && ((v.isbn && String(v.isbn) === String(item.isbn)) || (v.ISBN && String(v.ISBN) === String(item.isbn)))) return v;
+                        if (item.isbn13 && ((v.isbn13 && String(v.isbn13) === String(item.isbn13)) || (v.ISBN13 && String(v.ISBN13) === String(item.isbn13)))) return v;
+                    } catch (e) {}
+                }
+                // return first entry if nothing matched
+                var keys = Object.keys(respData);
+                if (keys && keys.length > 0) return respData[keys[0]];
+            }
+        } catch (e) { console.error('findStatusForItem error', e); }
+        return null;
+    }
+
+    // Ensure modal helpers exist early so event handlers can safely call them even if definitions appear later
+    try {
+        if (typeof window.openEditReviewModal !== 'function') window.openEditReviewModal = function(item, btn, status){ console.warn('openEditReviewModal not yet defined - fallback'); openReviewModal && typeof openReviewModal === 'function' ? openReviewModal(item, btn) : null; };
+        if (typeof window.openReviewModal !== 'function') window.openReviewModal = function(item, btn){ console.warn('openReviewModal not yet defined - fallback'); };
+        if (typeof window.closeReviewModal !== 'function') window.closeReviewModal = function(){ console.warn('closeReviewModal not yet defined - fallback'); };
+    } catch(e) {}
     // Flag to avoid double-restoring the saved search
     let restoredSearchDone = false;
     let initialBestsellerLoaded = false;
@@ -468,14 +516,10 @@ $(document).ready(function() {
                         data: JSON.stringify(payload),
                         success: function(resp) {
                             try {
+                                console.debug('[review/status] response for pendingItem:', pendingItem, resp);
                                 var statusObj = null;
                                 if (resp && resp.status === 'OK' && resp.data) {
-                                    if (payload.isbns && payload.isbns.length > 0 && resp.data[payload.isbns[0]]) statusObj = resp.data[payload.isbns[0]];
-                                    if (!statusObj && payload.isbns13 && payload.isbns13.length > 0 && resp.data[payload.isbns13[0]]) statusObj = resp.data[payload.isbns13[0]];
-                                    if (!statusObj) {
-                                        var keys = Object.keys(resp.data || {});
-                                        if (keys && keys.length > 0) statusObj = resp.data[keys[0]];
-                                    }
+                                    try { statusObj = findStatusForItem(resp.data, pendingItem); } catch(e){ statusObj = null; }
                                 }
                                 openEditReviewModal(pendingItem, $btn, statusObj);
                             } catch (e) { console.error('Failed to fetch review for edit', e); openEditReviewModal(pendingItem, $btn, null); }
@@ -617,15 +661,72 @@ $(document).ready(function() {
         $('#reviewModal').css('display','flex').hide().fadeIn(200);
     }
 
+    function openEditReviewModal(itemObj, $btnRef, status) {
+        try {
+            console.debug('[openEditReviewModal] itemObj:', itemObj, 'status:', status);
+            // If restoring an existing review, pre-fill the modal fields and show the delete button
+            try {
+                // Normalize possible field names returned by different endpoints/mappers
+                var _rating = null;
+                var _cmnt = null;
+                var _reviewText = null;
+                if (status) {
+                    // common names
+                    _rating = (typeof status.rating !== 'undefined') ? status.rating : (typeof status.RATING !== 'undefined' ? status.RATING : null);
+                    _cmnt = (typeof status.cmnt !== 'undefined') ? status.cmnt : (typeof status.CMNT !== 'undefined' ? status.CMNT : (typeof status.comment !== 'undefined' ? status.comment : null));
+                    _reviewText = (typeof status.reviewText !== 'undefined') ? status.reviewText : (typeof status.REVIEW_TEXT !== 'undefined' ? status.REVIEW_TEXT : (typeof status.text !== 'undefined' ? status.text : null));
+                    // sometimes nested objects or stringified JSON may occur; attempt to coerce
+                    try { if (_rating && typeof _rating === 'object' && _rating.value) _rating = _rating.value; } catch(e){}
+                    try { if (_cmnt && typeof _cmnt === 'object' && _cmnt.value) _cmnt = _cmnt.value; } catch(e){}
+                    try { if (_reviewText && typeof _reviewText === 'object' && _reviewText.value) _reviewText = _reviewText.value; } catch(e){}
+                }
+
+                if (status && (_rating != null || _cmnt != null || _reviewText != null)) {
+                    // set rating (ensure option present)
+                    var rv = (_rating != null && _rating !== '') ? String(_rating) : '';
+                    if (rv) {
+                        var $sel = $('#rvw_rating');
+                        if ($sel.find('option[value="' + rv + '"]').length === 0) {
+                            // add a temporary option if server sent a value like '4.2'
+                            $sel.find('.temp-rv-option').remove();
+                            $sel.append($('<option>').val(rv).text(rv).addClass('temp-rv-option'));
+                        }
+                        $sel.val(rv);
+                        $sel.trigger('change');
+                    } else {
+                        $('#rvw_rating').val(''); renderStars('');
+                    }
+                    $('#rvw_comnet').val(_cmnt != null ? String(_cmnt) : '');
+                    $('#rvw_text').val(_reviewText != null ? String(_reviewText) : '');
+                    $('#rvw_delete').show();
+                } else {
+                    // No existing review: hide delete button and clear fields
+                    $('#rvw_delete').hide();
+                    $('#rvw_comnet').val('');
+                    $('#rvw_text').val('');
+                    $('#rvw_rating').val(''); renderStars('');
+                }
+            } catch (e) { console.error('review field restore error', e); $('#rvw_delete').hide(); }
+            // Ensure the item identifiers are set for review actions
+            currentReviewItem = itemObj;
+            var itemIsbn = (itemObj.isbn13 && itemObj.isbn13.length === 13) ? itemObj.isbn13 : '';
+            var itemIsbn10 = (itemObj.isbn && itemObj.isbn.length === 10) ? itemObj.isbn : '';
+            $('#rvw_item_isbn').val(itemIsbn);
+            $('#rvw_item_isbn10').val(itemIsbn10);
+            $('#rvw_item_title').val(itemObj.title || '');
+            $('#rvw_item_author').val(itemObj.author || '');
+            // open the modal with a slight delay to ensure animations are smooth
+            setTimeout(function() {
+                $('#reviewModal').css('display','flex').hide().fadeIn(200);
+            }, 50);
+        } catch (e) { console.error('openEditReviewModal error', e); openReviewModal(itemObj, $btnRef); }
+    }
+
+    // expose modal helpers globally so callbacks defined elsewhere can call them
+    try { window.openEditReviewModal = openEditReviewModal; window.openReviewModal = openReviewModal; } catch(e) {}
+
     function closeReviewModal() {
-        // fade out and clear state after animation completes
-        $('#reviewModal').fadeOut(200, function(){
-            $(this).css('display','none');
-            // remove any temporary rating options left behind
-            try { $('#rvw_rating').find('.temp-rv-option').remove(); } catch(e){}
-            currentReviewItem = null;
-            currentLikeButton = null;
-        });
+        $('#reviewModal').fadeOut(200, function(){ $(this).css('display','none'); try { $('#rvw_rating').find('.temp-rv-option').remove(); } catch(e){} currentReviewItem = null; currentLikeButton = null; });
     }
 
     $('#rvw_cancel').on('click', function() {
@@ -922,12 +1023,7 @@ $(document).ready(function() {
                                     var statusObj = null;
                                     try {
                                         if (resp && resp.status === 'OK' && resp.data) {
-                                            if (payload.isbns && payload.isbns.length > 0 && resp.data[payload.isbns[0]]) statusObj = resp.data[payload.isbns[0]];
-                                            if (!statusObj && payload.isbns13 && payload.isbns13.length > 0 && resp.data[payload.isbns13[0]]) statusObj = resp.data[payload.isbns13[0]];
-                                            if (!statusObj) {
-                                                var keys = Object.keys(resp.data || {});
-                                                if (keys && keys.length > 0) statusObj = resp.data[keys[0]];
-                                            }
+                                            try { statusObj = findStatusForItem(resp.data, pItem); } catch(e){ statusObj = null; }
                                         }
                                     } catch (e) { }
                                     openEditReviewModal(pItem, null, statusObj);

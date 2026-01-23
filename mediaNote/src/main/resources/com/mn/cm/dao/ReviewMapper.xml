@@ -183,4 +183,17 @@
    	 )
 	</delete>
 
+    <select id="selectReadByUser" parameterType="map" resultType="map">
+        SELECT r.ISBN as isbn, r.ISBN13 as isbn13, r.RATING as rating, r.CMNT as cmnt, r.REVIEW_TEXT as reviewText, r.REG_DT as regDt, r.MOD_DT as modDt,
+               m.TITLE as title, m.AUTHOR as author, m.PUBLISHER as publisher, m.COVER as cover
+        FROM MN_BK_RVW r
+        LEFT JOIN MN_BK_MST m ON ( (r.ISBN IS NOT NULL AND r.ISBN = m.ISBN) OR (r.ISBN13 IS NOT NULL AND r.ISBN13 = m.ISBN13) )
+        WHERE r.USER_ID = #{userId}
+          AND r.READ_YN = 'Y'
+        ORDER BY r.MOD_DT DESC
+        <if test="limit != null">
+            LIMIT #{offset}, #{limit}
+        </if>
+    </select>
+
 </mapper>

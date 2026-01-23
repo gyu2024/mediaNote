@@ -52,7 +52,7 @@ if (b != null) {
 		<%-- include common header partial (user badge + logo) --%>
 		<jsp:include page="/WEB-INF/jsp/partials/header.jsp" />
 		<a href="#" id="backToList" class="back-to-list"
-			aria-label="검색으로 돌아가기">← 검색으로 돌아가기</a>
+			aria-label="검색으로 돌아가기">← 돌아가기</a>
 		<hr />
 		<script>
         (function(){
