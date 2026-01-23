@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mn.cm.dao.MovieMapper">
+
+    <insert id="insertMovie" parameterType="com.mn.cm.model.Movie">
+        INSERT INTO MN_MV_MST
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="mvId != null">MV_ID,</if>
+            TITLE, ORIGINAL_TITLE, OVERVIEW, RELEASE_DATE, VOTE_AVERAGE, VOTE_COUNT, POPULARITY, POSTER_PATH, BACKDROP_PATH, ORIGINAL_LANG, IS_ADULT, GENRE_IDS
+        </trim>
+        VALUES
+        <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="mvId != null">#{mvId},</if>
+            #{title}, #{originalTitle}, #{overview}, #{releaseDate}, #{voteAverage}, #{voteCount}, #{popularity}, #{posterPath}, #{backdropPath}, #{originalLang}, #{isAdult}, #{genreIds}
+        </trim>
+    </insert>
+
+    <select id="selectByMvId" parameterType="int" resultType="com.mn.cm.model.Movie">
+        SELECT MV_ID as mvId, TITLE as title, ORIGINAL_TITLE as originalTitle, OVERVIEW as overview, RELEASE_DATE as releaseDate, VOTE_AVERAGE as voteAverage, VOTE_COUNT as voteCount, POPULARITY as popularity, POSTER_PATH as posterPath, BACKDROP_PATH as backdropPath, ORIGINAL_LANG as originalLang, IS_ADULT as isAdult, GENRE_IDS as genreIds, REG_DT as regDt, MOD_DT as modDt
+        FROM MN_MV_MST
+        WHERE MV_ID = #{mvId}
+        LIMIT 1
+    </select>
+
+    <select id="selectByTitleAndRelease" parameterType="map" resultType="com.mn.cm.model.Movie">
+        SELECT MV_ID as mvId, TITLE as title, ORIGINAL_TITLE as originalTitle, OVERVIEW as overview, RELEASE_DATE as releaseDate, VOTE_AVERAGE as voteAverage, VOTE_COUNT as voteCount, POPULARITY as popularity, POSTER_PATH as posterPath, BACKDROP_PATH as backdropPath, ORIGINAL_LANG as originalLang, IS_ADULT as isAdult, GENRE_IDS as genreIds, REG_DT as regDt, MOD_DT as modDt
+        FROM MN_MV_MST
+        WHERE TITLE = #{title}
+        AND RELEASE_DATE = #{releaseDate}
+        LIMIT 1
+    </select>
+
+    <select id="selectByTitle" parameterType="string" resultType="com.mn.cm.model.Movie">
+        SELECT MV_ID as mvId, TITLE as title, ORIGINAL_TITLE as originalTitle, OVERVIEW as overview, RELEASE_DATE as releaseDate, VOTE_AVERAGE as voteAverage, VOTE_COUNT as voteCount, POPULARITY as popularity, POSTER_PATH as posterPath, BACKDROP_PATH as backdropPath, ORIGINAL_LANG as originalLang, IS_ADULT as isAdult, GENRE_IDS as genreIds, REG_DT as regDt, MOD_DT as modDt
+        FROM MN_MV_MST
+        WHERE TITLE = #{title}
+        LIMIT 1
+    </select>
+
+</mapper>

@@ -347,6 +347,51 @@ $(document).ready(function() {
         });
     }
 
+    // Render TMDB movie search results (simple card layout)
+    function renderMovieResults(tmdbResp) {
+        try {
+            if (!tmdbResp) { $('#resultArea').html("<p style='padding:40px; color:#999; text-align:center;'>검색 결과가 없습니다.</p>"); return; }
+            // TMDB returns { page, results: [ ... ], total_results, total_pages }
+            var results = tmdbResp.results || [];
+            if (!Array.isArray(results) || results.length === 0) { $('#resultArea').html("<p style='padding:40px; color:#999; text-align:center;'>검색 결과가 없습니다.</p>"); return; }
+
+            var $table = $("<table class='result-table'></table>");
+            results.forEach(function(movie){
+                try {
+                    var $tr = $("<tr></tr>");
+                    $tr.attr('data-movie-id', movie.id || '');
+
+                    var $coverTd = $("<td class='info-cover'></td>");
+                    var posterPath = movie.poster_path ? ('https://image.tmdb.org/t/p/w185' + movie.poster_path) : '';
+                    var detailHref = movie.id ? ('https://www.themoviedb.org/movie/' + movie.id) : '#';
+                    var $a = $("<a class='mn-item-link' target='_blank' rel='noopener'></a>").attr('href', detailHref);
+                    var $img = $("<img/>").attr('src', posterPath).attr('alt', movie.title || movie.name || 'poster');
+                    $a.append($img); $coverTd.append($a);
+
+                    var $detailsTd = $("<td class='info-details'></td>");
+                    var $titleLink = $("<a class='mn-item-link' target='_blank' rel='noopener'></a>").attr('href', detailHref);
+                    $titleLink.append($("<div class='info-title'></div>").text(movie.title || movie.name || '제목 없음'));
+                    $detailsTd.append($titleLink);
+
+                    var $meta = $("<div class='info-meta'></div>");
+                    $meta.append($("<div class='info-author'></div>").text((movie.release_date ? movie.release_date : '') ));
+                    $meta.append($("<div class='info-publisher-date'></div>").text(movie.original_language ? (movie.original_language.toUpperCase()) : ''));
+                    $detailsTd.append($meta);
+
+                    var $actions = $("<div class='info-actions'></div>");
+                    // overview removed from movie list per request
+                    // (keep no extra action content for TMDB search results)
+                    $detailsTd.append($actions);
+
+                    $tr.append($coverTd).append($detailsTd);
+                    $table.append($tr);
+                } catch(e) { console.error('renderMovieResults row error', e); }
+            });
+
+            $('#resultArea').html($table);
+        } catch (e) { console.error('renderMovieResults error', e); $('#resultArea').html("<p style='padding:40px; color:#999; text-align:center;'>결과를 표시할 수 없습니다.</p>"); }
+    }
+
     // performSearch: query the server-side search endpoint and render results
     function performSearch() {
         try {
@@ -358,6 +403,31 @@ $(document).ready(function() {
 
             // show loading UI
             $('#resultArea').html("<p style='padding:40px; color:#999; text-align:center;'>로딩 중...</p>");
+
+            // If searching for movies, call the server TMDB proxy endpoint
+            if (mt === 'movie') {
+                $.ajax({
+                    url: contextPath + '/movie/search',
+                    type: 'GET',
+                    data: { query: q },
+                    dataType: 'json',
+                    success: function(response) {
+                        try {
+                            // If server returned an error-like shape
+                            if (response && response.status === 'ERR') {
+                                $('#resultArea').html("<p style='padding:40px; color:#999; text-align:center;'>영화 검색을 처리할 수 없습니다: " + (response.message||'') + "</p>");
+                                return;
+                            }
+                            renderMovieResults(response);
+                        } catch (e) { console.error('movie search render error', e); $('#resultArea').html("<p style='padding:40px; color:#999; text-align:center;'>영화 결과를 처리할 수 없습니다.</p>"); }
+                    },
+                    error: function(xhr) {
+                        console.error('영화 검색 호출 실패', xhr && xhr.status);
+                        $('#resultArea').html("<p style='padding:40px; color:#999; text-align:center;'>영화 검색 중 오류가 발생했습니다.</p>");
+                    }
+                });
+                return;
+            }
 
             $.ajax({
                 url: contextPath + '/hello',

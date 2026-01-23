@@ -30,8 +30,8 @@
         SELECT COUNT(*)
         FROM MN_BK_WISH w
         WHERE (
-            (#{isbn} IS NOT NULL AND #{isbn} != '' AND w.ISBN = #{isbn})
-            OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND w.ISBN13 = #{isbn13})
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND CONVERT(w.ISBN USING utf8mb4) = CONVERT(CAST(#{isbn} AS CHAR) USING utf8mb4))
+            OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND CONVERT(w.ISBN13 USING utf8mb4) = CONVERT(CAST(#{isbn13} AS CHAR) USING utf8mb4))
         )
     </select>
 
@@ -40,9 +40,22 @@
         FROM MN_BK_WISH w
         WHERE w.USER_ID = #{userId}
         AND (
-            (#{isbn} IS NOT NULL AND #{isbn} != '' AND w.ISBN = #{isbn})
-            OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND w.ISBN13 = #{isbn13})
+            (#{isbn} IS NOT NULL AND #{isbn} != '' AND CONVERT(w.ISBN USING utf8mb4) = CONVERT(CAST(#{isbn} AS CHAR) USING utf8mb4))
+            OR (#{isbn13} IS NOT NULL AND #{isbn13} != '' AND CONVERT(w.ISBN13 USING utf8mb4) = CONVERT(CAST(#{isbn13} AS CHAR) USING utf8mb4))
         )
+    </select>
+
+    <!-- New: fetch wishlist items for a user with optional pagination -->
+    <select id="selectUserWishes" parameterType="map" resultType="map">
+        SELECT w.ISBN as isbn, w.ISBN13 as isbn13, w.REG_DT as regDt,
+               m.TITLE as title, m.AUTHOR as author, m.PUBLISHER as publisher, m.COVER as cover
+        FROM MN_BK_WISH w
+        LEFT JOIN MN_BK_MST m ON ( (w.ISBN IS NOT NULL AND CONVERT(w.ISBN USING utf8mb4) = CONVERT(m.ISBN USING utf8mb4)) OR (w.ISBN13 IS NOT NULL AND CONVERT(w.ISBN13 USING utf8mb4) = CONVERT(m.ISBN13 USING utf8mb4)) )
+        WHERE w.USER_ID = #{userId}
+        ORDER BY w.REG_DT DESC
+        <if test="limit != null">
+            LIMIT #{offset}, #{limit}
+        </if>
     </select>
 
 </mapper>

@@ -50,4 +50,13 @@ public class WishDAO {
         Long cnt = sqlSession.selectOne("com.mn.cm.dao.WishMapper.selectUserWishCount", params);
         return (cnt == null) ? 0L : cnt.longValue();
     }
+
+    // New: fetch wishlist items for a user with optional pagination
+    public java.util.List<java.util.Map<String,Object>> selectWishesByUser(String userId, Integer offset, Integer limit) {
+        Map<String,Object> params = new HashMap<>();
+        params.put("userId", (userId != null) ? userId : "");
+        params.put("offset", (offset != null) ? offset : 0);
+        params.put("limit", (limit != null) ? limit : null);
+        return sqlSession.selectList("com.mn.cm.dao.WishMapper.selectUserWishes", params);
+    }
 }

@@ -46,15 +46,16 @@
   margin-top: 12px;
 }
 
+/* Use a two-column grid for service links so items appear in 2 columns */
 #myLnk .servLnk ul {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr); /* 2 columns */
   gap: 10px;
+  align-items: start;
 }
 
 #myLnk .servLnk ul li {
-  flex: 1 0 120px; /* grow, don't shrink below 120px */
-  max-width: 160px;
+  width: 100%; /* ensure each grid cell stretches full width */
 }
 
 #myLnk .servLnk .lnk {
@@ -113,12 +114,13 @@
 
 /* smaller screens: tighter grid */
 @media (max-width: 760px) {
-  #myLnk .servLnk ul { gap: 8px; }
-  #myLnk .servLnk ul li { flex: 1 0 28%; max-width: none; }
+  #myLnk .servLnk ul { gap: 8px; grid-template-columns: repeat(2, 1fr); }
+  #myLnk .servLnk .lnk { padding: 9px; }
 }
 
 @media (max-width: 420px) {
-  #myLnk .servLnk ul { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  /* keep two columns on small phones; switch to single column only on very narrow viewports */
+  #myLnk .servLnk ul { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   #myLnk .servLnk .lnk { padding: 8px; }
   #myLnk .etcLnk ul li { font-size: 12px; }
 }

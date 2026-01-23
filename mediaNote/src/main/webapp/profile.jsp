@@ -25,7 +25,7 @@
    com.mn.cm.model.UserMaster userMaster = (com.mn.cm.model.UserMaster) request.getAttribute("userMaster");
 %>
 
-<main class="profile-main<%= (sessionUser == null ? " profile-empty" : "") %>">
+<main class='profile-main<%= (sessionUser == null ? " profile-empty" : "") %>'>
     <% if (sessionUser == null) { %>
         <p>로그인이 필요합니다.<br><a href="<%= request.getContextPath() %>/login/kakao?returnUrl=<%= java.net.URLEncoder.encode(request.getRequestURI(), "UTF-8") %>">로그인</a></p>
     <% } else { %>
@@ -43,11 +43,11 @@
   <path data-name="line 2" transform="translate(18.817 18.126)" class="ico_line" stroke="#fff" style="fill:none;stroke-miterlimit:10;stroke-width:1.5px" d="M0 0h5.111"></path>
   <path data-name="line 3" transform="translate(18.817 23.306)" class="ico_line" stroke="#fff" style="fill:none;stroke-miterlimit:10;stroke-width:1.5px" d="M0 0h5.111"></path>
 </svg></em><em class="txt">읽은 책</em></a></li>
-                <li><a href="https://ssl.yes24.com/MMyPageOrderClaimList/MMyPageOrderClaimList" class="lnk"><em class="ico"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+                <li><a href="${pageContext.request.contextPath}/MyPage/MyWishList" class="lnk"><em class="ico"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
   <path data-name="path 1" d="M204.7 1113.028h8.79a2.854 2.854 0 0 0 0-5.708h-8.79l2.212-2.211" transform="translate(-192.951 -1088.652)" class="ico_line" stroke="#fff" style="fill:none;stroke-linejoin:round;stroke-width:1.5px"></path>
   <path data-name="path 2" d="M198.027 1098.62v12.626h18.824v-14.653h-18.824l2.9-4.344h12.088" transform="translate(-190.028 -1083.018)" class="ico_line" stroke="#fff" style="fill:none;stroke-linejoin:round;stroke-width:1.5px"></path>
   <path data-name="path 3" d="M227.305 1093.432c-.761-.761-.353-1.514.557-2.424.886-.886 1.662-1.318 2.424-.557s.329 1.538-.557 2.424c-.91.91-1.663 1.318-2.424.557" transform="translate(-202.68 -1082.058)" class="ico_aFill" fill="#fff"></path>
-</svg></em><em class="txt">반품/교환</em></a></li>
+</svg></em><em class="txt">위시리스트</em></a></li>
                 <li><a href="https://ssl.yes24.com/MMyPageOrderCancelList/MMyPageOrderCancelList" class="lnk"><em class="ico"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
   <path data-name="path 1" d="M197.868 454.527c0-1.041.792-1.276 2.037-1.276 1.21 0 2.036.235 2.036 1.276s-.826 1.276-2.036 1.276c-1.244 0-2.037-.235-2.037-1.276" transform="translate(-185.519 -435.78)" class="ico_aFill" fill="#fff"></path>
   <path data-name="path 2" d="M197.868 462.638c0-1.041.792-1.276 2.037-1.276 1.21 0 2.036.235 2.036 1.276s-.826 1.276-2.036 1.276c-1.244 0-2.037-.235-2.037-1.276" transform="translate(-185.519 -439.385)" class="ico_aFill" fill="#fff"></path>
@@ -76,7 +76,7 @@
   <path data-name="line 3" transform="translate(23.071 22.508)" class="ico_line" stroke="#fff" style="stroke-miterlimit:10;fill:none;stroke-width:1.5px" d="M0 0h5.416"></path>
   <path data-name="path 1" d="M204.688 728.082a5.309 5.309 0 0 1 5.151 5.421" transform="translate(-192.133 -708.992)" class="ico_line" stroke="#fff" style="stroke-linejoin:round;fill:none;stroke-width:1.5px"></path>
   <path data-name="path 2" d="M203.518 728.082a5.078 5.078 0 0 0-4.282 2.421" transform="translate(-190.963 -708.992)" class="ico_line" stroke="#fff" style="stroke-linejoin:round;fill:none;stroke-width:1.5px"></path>
-  <path data-name="path 3" d="M204.079 723.315c-1.254 0-1.538-.955-1.538-2.454 0-1.461.284-2.455 1.538-2.455s1.538.994 1.538 2.455c0 1.5-.284 2.454-1.538 2.454" transform="translate(-191.672 -706.915)" class="ico_aFill" fill="#fff"></path>
+  <path data-name="path 3" d="M204.079 723.315c-1.254 0-1.538-.955-1.538-2.454 0-1.461.284-2.455 1.538-2.455s1.538.994 1.538 2.455c0 1.5-.284 2.454-1.538 2.454" transform="translate(-191.672 -706.915)" class="ico_line" stroke="#fff" style="fill:none;stroke-miterlimit:10;stroke-width:1.5px"></path>
 </svg></em><em class="txt">회원정보</em></a></li>
                 <li><a href="https://m.yes24.com/Member/CheckMember?action=MyAddress" class="lnk"><em class="ico"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
   <g id="ico_address" transform="translate(0.029)">
@@ -145,9 +145,9 @@
 </svg></em><em class="txt">선물함</em></a></li>
                     <li><a href="https://m.yes24.com/Member/CheckMember?action=Security" class="lnk"><em class="ico"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
   <path data-name="path 1" d="M220.114 1201.645v13.127a16.334 16.334 0 0 1-9.757 9.315l-.243.082-.236-.082a16.363 16.363 0 0 1-9.764-9.315v-13.127c4.923 0 9.029-1.943 10.007-4.533.972 2.588 5.07 4.533 9.993 4.533z" transform="translate(-192.115 -1193.112)" class="ico_line" stroke="#fff" style="fill:none;stroke-linejoin:round;stroke-width:1.5px"></path>
-  <path data-name="path 2" d="M212.933 1215.712a5.535 5.535 0 0 1 5.37 5.654" transform="translate(-195.3 -1197.733)" class="ico_line" stroke="#fff" style="fill:none;stroke-linejoin:round;stroke-width:1.5px"></path>
+  <path data-name="path 2" d="M212.933 1215.712a5.535,5.535,0,0,1,5.37,5.654" transform="translate(-195.3 -1197.733)" class="ico_line" stroke="#fff" style="fill:none;stroke-linejoin:round;stroke-width:1.5px"></path>
   <path data-name="path 3" d="M211.457 1215.712a5.293 5.293 0 0 0-4.464 2.525" transform="translate(-193.824 -1197.733)" class="ico_line" stroke="#fff" style="fill:none;stroke-linejoin:round;stroke-width:1.5px"></path>
-  <path data-name="path 4" d="M212.2 1210.288c-1.308 0-1.6-.995-1.6-2.558 0-1.523.3-2.561 1.6-2.561s1.6 1.038 1.6 2.561c0 1.563-.3 2.558-1.6 2.558" transform="translate(-194.719 -1195.114)" class="ico_aFill" fill="#fff"></path>
+  <path data-name="path 4" d="M212.2 1210.288c-1.308 0-1.6-.995-1.6-2.558 0-1.523.3-2.561 1.6-2.561s1.6,1.038,1.6,2.561c0,1.563-.3,2.558-1.6,2.558" transform="translate(-194.719 -1195.114)" class="ico_aFill" fill="#fff"></path>
 </svg></em><em class="txt">보안설정</em></a></li>
                 <li><a href="/MyPage/MyReviewComment" class="lnk"><em class="ico"><svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
   <path data-name="path 1" d="m204.886 1158.03 1.787.259-1.292 1.261.305 1.781-1.6-.84-1.6.841.305-1.781-1.295-1.26 1.788-.261.8-1.619z" transform="translate(-193.572 -1141.003)" class="ico_line" stroke="#fff" style="fill:none;stroke-linejoin:round;stroke-width:1.5px"></path>
@@ -161,8 +161,6 @@
   <path data-name="path 2" d="M208.786 1046.252h-1.673v-.85h2.721a4.791 4.791 0 0 1-2.475 4.621l-.619-.738a3.731 3.731 0 0 0 2.046-3.033m3.977 5.158h-1.021v-3.444h-.529v3.153h-.991v-6.373h.991v2.356h.529v-2.534h1.021z" transform="translate(-194.968 -1034.478)" class="ico_fill" fill="#fff"></path>
   <path data-name="path 3" d="M217.679 1045a1.75 1.75 0 1 1-1.893 1.736 1.78 1.78 0 0 1 1.893-1.736m-.872 3.973h1.093v1.469h3.72v.858h-4.808zm.872-1.417a.813.813 0 1 0-.849-.82.781.781 0 0 0 .849.82m3.765 1.908h-1.073v-4.89h1.073z" transform="translate(-197.215 -1034.48)" class="ico_fill" fill="#fff"></path>
   <path data-name="path 4" d="M208.414 1056.043h-1.309v-.858h3.712v.858h-1.3a2.051 2.051 0 0 0 1.529 1.826l-.522.842a2.551 2.551 0 0 1-1.543-1.289 2.649 2.649 0 0 1-1.626 1.46l-.558-.85a2.192 2.192 0 0 0 1.614-1.989m1.881 2.944c1.48 0 2.382.5 2.385 1.333s-.9 1.332-2.385 1.335c-1.46 0-2.363-.5-2.363-1.335s.9-1.329 2.363-1.333m0 1.849c.873 0 1.312-.16 1.319-.516s-.446-.521-1.319-.521c-.854 0-1.3.161-1.3.521s.443.519 1.3.516m2.364-1.975h-1.066v-1.561h-.97v-.865h.97v-1.635h1.066z" transform="translate(-194.983 -1037.019)" class="ico_fill" fill="#fff"></path>
-  <path data-name="path 5" d="M221.921 1061.013h-6.254v-.872h2.587v-1.2h-1.946v-3.578h1.073v1.007h2.8v-1.007h1.074v3.578h-1.938v1.2h2.609zm-1.744-3.8h-2.8v.88h2.8z" transform="translate(-197.186 -1037.16)" class="ico_fill" fill="#fff"></path>
-  <path data-name="path 6" d="M221.138 1041.791c-1.008-.478-.87-1.354-.3-2.558.558-1.174 1.164-1.865 2.172-1.387s.856 1.387.3 2.558c-.571 1.205-1.163 1.865-2.171 1.387" transform="translate(-198.36 -1032.77)" class="ico_aFill" fill="#fff"></path>
 </svg></em><em class="txt">이용내역</em></a></li>
             </ul>
         </div>

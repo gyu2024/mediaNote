@@ -12,7 +12,9 @@
 <jsp:include page="/WEB-INF/jsp/partials/header.jsp" />
 <main class="container">
     <h2>읽은 책</h2>
-    <div id="readArea"><p style="color:#777;">불러오는 중...</p></div>
+    <!-- floating back button (styled like bookDetail.jsp) -->
+    <a href="${pageContext.request.contextPath}/profile" id="backToList" class="back-to-list" aria-label="검색으로 돌아가기">← 돌아가기</a>
+    <div id="readArea" style="margin: 15px 0px 0px 0;"><p style="color:#777;">불러오는 중...</p></div>
 </main>
 
 <!-- review modal (copied minimal modal from index.jsp) -->
@@ -20,7 +22,7 @@
     <div class="mn-modal" role="dialog" aria-modal="true" aria-labelledby="mn-modal-title">
         <header class="mn-modal-header">
             <h3 id="mn-modal-title">리뷰 작성</h3>
-            <button class="mn-modal-close" aria-label="닫기" onclick="closeReviewModal()">✕</button>
+            <button class="mn-modal-close" aria-label="닫기">✕</button>
         </header>
         <section class="mn-modal-body">
             <div class="mn-row">
@@ -39,6 +41,18 @@
                         <option value="4.5">4.5</option>
                         <option value="5.0">5.0</option>
                     </select>
+                </div>
+            </div>
+            <div class="mn-row" style="justify-content: center;">
+                <div class="rating-guide-container" style="width: 100%;">
+                    <strong class="rating-title">⭐ 평점 가이드</strong>
+                    <ul class="rating-list">
+                        <li class="rating-item"><span class="rating-score">5.0</span><span class="rating-desc">인생 책 (삶에 영향을 준 최고의 책)</span></li>
+                        <li class="rating-item"><span class="rating-score">4.0 ~ 4.5</span><span class="rating-desc">추천 (재미있고 남들에게 권하고 싶은 책)</span></li>
+                        <li class="rating-item"><span class="rating-score">3.0 ~ 3.5</span><span class="rating-desc">무난 (읽을만하고 시간이 아깝지 않은 수준)</span></li>
+                        <li class="rating-item"><span class="rating-score">2.0 ~ 2.5</span><span class="rating-desc">아쉬움 (기대에 못 미치거나 지루함)</span></li>
+                        <li class="rating-item"><span class="rating-score">1.0</span><span class="rating-desc">시간 아까움 (내용이 부실하거나 권하고 싶지 않음)</span></li>
+                    </ul>
                 </div>
             </div>
             <div class="mn-row">
@@ -114,6 +128,102 @@
                 $table.append($tr);
             });
             $out.append($table);
+
+            // After rendering, mark review buttons active for items that already have reviews (batch request)
+            try { markReviewButtons(items); } catch(e) { console.error('markReviewButtons error', e); }
+
+            // After rendering, mark wish buttons active for items the user has wished
+            try { markWishButtons(items); } catch(e) { console.error('markWishButtons error', e); }
+        }
+
+        // Batch-query server for review statuses and toggle the review button state
+        function markReviewButtons(items) {
+            if (!items || items.length === 0) return;
+            var payload = { isbns: [], isbns13: [] };
+            items.forEach(function(it){ if (it.isbn && String(it.isbn).trim().length>0) payload.isbns.push(String(it.isbn).trim()); else if (it.isbn13 && String(it.isbn13).trim().length>0) payload.isbns13.push(String(it.isbn13).trim()); });
+            if ((payload.isbns.length===0) && (payload.isbns13.length===0)) return;
+            $.ajax({
+                url: ctx + '/review/status',
+                type: 'POST',
+                contentType: 'application/json; charset=UTF-8',
+                data: JSON.stringify(payload),
+                success: function(resp){
+                    try {
+                        if (resp && resp.status === 'OK' && resp.data) {
+                            // iterate table rows and set active where appropriate
+                            $('#readArea table.result-table tr').each(function(){
+                                var $tr = $(this);
+                                var rIsbn = $tr.attr('data-isbn') || $tr.find('.item-isbn').val() || '';
+                                var rIsbn13 = $tr.attr('data-isbn13') || $tr.find('.item-isbn13').val() || '';
+                                var st = null;
+                                if (rIsbn && resp.data[rIsbn]) st = resp.data[rIsbn];
+                                if (!st && rIsbn13 && resp.data[rIsbn13]) st = resp.data[rIsbn13];
+                                if (!st) {
+                                    var keys = Object.keys(resp.data || {});
+                                    for (var i=0;i<keys.length;i++) { if (!st && resp.data[keys[i]] && keys[i] === rIsbn) st = resp.data[keys[i]]; }
+                                }
+                                if (st && (st.rating != null || (st.cmnt && String(st.cmnt).trim().length>0) || (st.reviewText && String(st.reviewText).trim().length>0))) {
+                                    try { $tr.find('.btn-rvw').addClass('active').attr('aria-pressed','true'); } catch(e){}
+                                } else {
+                                    try { $tr.find('.btn-rvw').removeClass('active').attr('aria-pressed','false'); } catch(e){}
+                                }
+                            });
+                        }
+                    } catch(e){ console.error('markReviewButtons parse error', e); }
+                },
+                error: function(){ /* ignore */ }
+            });
+        }
+
+        // Batch-query server for wish statuses and toggle the wish button state
+        function markWishButtons(items) {
+            if (!items || items.length === 0) return;
+            var payload = { isbns: [], isbns13: [] };
+            items.forEach(function(it){ if (it.isbn && String(it.isbn).trim().length>0) payload.isbns.push(String(it.isbn).trim()); else if (it.isbn13 && String(it.isbn13).trim().length>0) payload.isbns13.push(String(it.isbn13).trim()); });
+            if ((payload.isbns.length===0) && (payload.isbns13.length===0)) {
+                // fallback: try localStorage keys
+                $('#readArea table.result-table tr').each(function(){
+                    var $tr = $(this);
+                    var title = $tr.find('.info-title').text() || '';
+                    var author = $tr.find('.info-author').text() || '';
+                    var rawKey = title + '|' + author;
+                    try { if (localStorage.getItem(makeStorageKey('mn_wish', rawKey)) === '1') { $tr.find('.btn-wish').addClass('active').attr('aria-pressed','true'); } } catch(e) {}
+                });
+                return;
+            }
+            $.ajax({
+                url: ctx + '/wish/status',
+                type: 'POST',
+                contentType: 'application/json; charset=UTF-8',
+                data: JSON.stringify(payload),
+                success: function(resp){
+                    try {
+                        if (resp && resp.status === 'OK' && resp.data) {
+                            $('#readArea table.result-table tr').each(function(){
+                                var $tr = $(this);
+                                var rIsbn = $tr.attr('data-isbn') || $tr.find('.item-isbn').val() || '';
+                                var rIsbn13 = $tr.attr('data-isbn13') || $tr.find('.item-isbn13').val() || '';
+                                var wished = false;
+                                if (rIsbn && (typeof resp.data[rIsbn] !== 'undefined')) wished = !!resp.data[rIsbn];
+                                if (!wished && rIsbn13 && (typeof resp.data[rIsbn13] !== 'undefined')) wished = !!resp.data[rIsbn13];
+                                // fallback: check localStorage
+                                if (!wished) {
+                                    var title = $tr.find('.info-title').text() || '';
+                                    var author = $tr.find('.info-author').text() || '';
+                                    var rawKey = (rIsbn && rIsbn.length) ? rIsbn : (title + '|' + author);
+                                    try { if (localStorage.getItem(makeStorageKey('mn_wish', rawKey)) === '1') wished = true; } catch(e) {}
+                                }
+                                if (wished) {
+                                    try { $tr.find('.btn-wish').addClass('active').attr('aria-pressed','true'); } catch(e){}
+                                } else {
+                                    try { $tr.find('.btn-wish').removeClass('active').attr('aria-pressed','false'); } catch(e){}
+                                }
+                            });
+                        }
+                    } catch(e){ console.error('markWishButtons parse error', e); }
+                },
+                error: function(){ /* ignore */ }
+            });
         }
 
         // small helpers copied from index.jsp for consistent localStorage keys and auth flow
@@ -150,35 +260,48 @@
 
             requireLoginThen(function(){
                 try {
-                    if (!$btn.hasClass('active')) {
+                    // Always query the server for existing review/status for this item
+                    var payload = { isbns: [], isbns13: [] };
+                    if (item.isbn && item.isbn.toString().trim().length > 0) payload.isbns.push(item.isbn.toString().trim());
+                    if (item.isbn13 && item.isbn13.toString().trim().length > 0) payload.isbns13.push(item.isbn13.toString().trim());
+
+                    // If no ISBNs are available, fall back to opening a new review modal immediately
+                    if ((payload.isbns.length === 0) && (payload.isbns13.length === 0)) {
                         openReviewModal(item, $btn);
-                    } else {
-                        // fetch existing status and open edit modal
-                        var payload = { isbns: [], isbns13: [] };
-                        if (item.isbn && item.isbn.toString().trim().length > 0) payload.isbns.push(item.isbn.toString().trim());
-                        if (item.isbn13 && item.isbn13.toString().trim().length > 0) payload.isbns13.push(item.isbn13.toString().trim());
-                        $.ajax({
-                            url: ctx + '/review/status',
-                            type: 'POST',
-                            contentType: 'application/json; charset=UTF-8',
-                            data: JSON.stringify(payload),
-                            success: function(resp){
-                                var statusObj = null;
-                                try {
-                                    if (resp && resp.status === 'OK' && resp.data) {
-                                        if (payload.isbns && payload.isbns.length > 0 && resp.data[payload.isbns[0]]) statusObj = resp.data[payload.isbns[0]];
-                                        if (!statusObj && payload.isbns13 && payload.isbns13.length > 0 && resp.data[payload.isbns13[0]]) statusObj = resp.data[payload.isbns13[0]];
-                                        if (!statusObj) {
-                                            var keys = Object.keys(resp.data || {});
-                                            if (keys && keys.length > 0) statusObj = resp.data[keys[0]];
-                                        }
-                                    }
-                                } catch (e) { console.error('status parse error', e); }
-                                openEditReviewModal(item, $btn, statusObj);
-                            },
-                            error: function(){ openEditReviewModal(item, $btn, null); }
-                        });
+                        return;
                     }
+
+                    $.ajax({
+                        url: ctx + '/review/status',
+                        type: 'POST',
+                        contentType: 'application/json; charset=UTF-8',
+                        data: JSON.stringify(payload),
+                        success: function(resp){
+                            var statusObj = null;
+                            try {
+                                if (resp && resp.status === 'OK' && resp.data) {
+                                    if (payload.isbns && payload.isbns.length > 0 && resp.data[payload.isbns[0]]) statusObj = resp.data[payload.isbns[0]];
+                                    if (!statusObj && payload.isbns13 && payload.isbns13.length > 0 && resp.data[payload.isbns13[0]]) statusObj = resp.data[payload.isbns13[0]];
+                                    if (!statusObj) {
+                                        var keys = Object.keys(resp.data || {});
+                                        if (keys && keys.length > 0) statusObj = resp.data[keys[0]];
+                                    }
+                                }
+                            } catch (e) { console.error('status parse error', e); }
+
+                            if (statusObj && (statusObj.rating != null || (statusObj.cmnt && String(statusObj.cmnt).trim().length>0) || (statusObj.reviewText && String(statusObj.reviewText).trim().length>0) )) {
+                                // we have an existing review/status -> open edit view prefilled
+                                openEditReviewModal(item, $btn, statusObj);
+                            } else {
+                                // no review yet -> open write modal
+                                openReviewModal(item, $btn);
+                            }
+                        },
+                        error: function(){
+                            // on error assume no existing review and open new modal
+                            openReviewModal(item, $btn);
+                        }
+                    });
                 } catch (e) { console.error('btn-rvw handler error', e); openReviewModal(item, $btn); }
             }, { type: 'like', item: item });
         });
@@ -288,6 +411,8 @@
         $(document).on('change', '#rvw_rating', function(){ renderStars(this.value); });
         // overlay close and ESC handling
         $(document).on('click', '#reviewModal', function(e){ if (e.target === this) closeReviewModal(); });
+        // close button inside modal header: call closeReviewModal (function is inside IIFE so inline onclick can't reach it)
+        $(document).on('click', '#reviewModal .mn-modal-close', function(e){ e.preventDefault(); closeReviewModal(); });
         $(document).on('keydown', function(e){ if (e.key === 'Escape' || e.key === 'Esc') { var ov = document.getElementById('reviewModal'); if (ov && ov.style.display !== 'none') closeReviewModal(); } });
 
         // Try server endpoints
