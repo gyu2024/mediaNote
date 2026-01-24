@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.stream.Collectors;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mn.cm.dao.ReviewDAO;
+import com.mn.cm.dao.MovieReviewDAO;
 import com.mn.cm.model.User;
 
 @Controller
@@ -28,6 +29,9 @@ public class ReviewController {
 
     @Autowired
     private ReviewDAO reviewDAO;
+
+    @Autowired
+    private MovieReviewDAO movieReviewDAO;
 
     private static final Logger logger = LoggerFactory.getLogger(ReviewController.class);
 
@@ -71,9 +75,21 @@ public class ReviewController {
             }
 
             // Accept multiple possible keys for ISBN/item id
-            String isbn = String.valueOf(payload.get("isbn"));
-            String isbn13 = String.valueOf(payload.get("isbn13"));
+            String isbn = payload.get("isbn") != null ? String.valueOf(payload.get("isbn")) : null;
+            String isbn13 = payload.get("isbn13") != null ? String.valueOf(payload.get("isbn13")) : null;
 
+            // Detect movie id (support mvId / movieId / itemMovieId)
+            Integer mvId = null;
+            try {
+                Object mobj = payload.get("mvId");
+                if (mobj == null) mobj = payload.get("movieId");
+                if (mobj == null) mobj = payload.get("itemMovieId");
+                if (mobj == null) mobj = payload.get("itemId");
+                if (mobj != null) {
+                    String ms = String.valueOf(mobj);
+                    if (ms != null && ms.trim().length() > 0) mvId = Integer.valueOf(ms.trim());
+                }
+            } catch (Exception ignore) { mvId = null; }
 
             // additional payload values
             Double rating = null;
@@ -83,10 +99,17 @@ public class ReviewController {
             String cmnt = payload.get("comment") != null ? String.valueOf(payload.get("comment")) : (payload.get("cmnt") != null ? String.valueOf(payload.get("cmnt")) : null);
             String reviewText = payload.get("text") != null ? String.valueOf(payload.get("text")) : null;
 
-            logger.info("[SAVE_REVIEW] request - parsedJson:{}, user:{}, isbn:{}, rating:{}, cmntPresent:{}, textPresent:{}",
-                    parsedJson, userId, isbn, rating, (cmnt!=null), (reviewText!=null));
+            logger.info("[SAVE_REVIEW] request - parsedJson:{}, user:{}, isbn:{}, mvId:{}, rating:{}, cmntPresent:{}, textPresent:{}",
+                    parsedJson, userId, isbn, mvId, rating, (cmnt!=null), (reviewText!=null));
 
-            // Persist review: pass both isbn and isbn13 so mapper columns are set correctly
+            // If this is a movie review (mvId present), route to MovieReviewDAO
+            if (mvId != null) {
+                movieReviewDAO.insertOrUpdateReview(userId, mvId, rating, cmnt, reviewText);
+                result.put("status", "OK");
+                return result;
+            }
+
+            // Persist review: pass both isbn and isbn13 so mapper columns are set correctly (book flow)
             reviewDAO.insertOrUpdateReview(userId, isbn, isbn13, rating, cmnt, reviewText);
 
             result.put("status", "OK");
@@ -115,6 +138,7 @@ public class ReviewController {
             // parse request body or params
             java.util.List<String> isbns = new java.util.ArrayList<>();
             java.util.List<String> isbns13 = new java.util.ArrayList<>();
+            java.util.List<Integer> mvIds = new java.util.ArrayList<>();
             String contentType = request.getContentType();
             boolean parsedJson = false;
             try {
@@ -122,6 +146,15 @@ public class ReviewController {
                     Map<String,Object> payload = objectMapper.readValue(request.getInputStream(), Map.class);
                     if (payload.get("isbns") instanceof java.util.List) isbns = (java.util.List<String>) payload.get("isbns");
                     if (payload.get("isbns13") instanceof java.util.List) isbns13 = (java.util.List<String>) payload.get("isbns13");
+                    // movie ids (mvIds)
+                    if (payload.get("mvIds") instanceof java.util.List) {
+                        java.util.List l = (java.util.List) payload.get("mvIds");
+                        for (Object o : l) try { if (o!=null) mvIds.add(Integer.valueOf(String.valueOf(o))); } catch(Exception ignore) {}
+                    }
+                    // single mvId
+                    if (payload.get("mvId") != null) {
+                        try { mvIds.add(Integer.valueOf(String.valueOf(payload.get("mvId")))); } catch(Exception ignore) {}
+                    }
                     parsedJson = true;
                 }
             } catch (Exception ex) { }
@@ -129,15 +162,41 @@ public class ReviewController {
                 // try request parameters: comma separated
                 String sIsbns = request.getParameter("isbns");
                 String sIsbns13 = request.getParameter("isbns13");
+                String sMvIds = request.getParameter("mvIds");
+                String sMvId = request.getParameter("mvId");
                 if (sIsbns != null && sIsbns.trim().length() > 0) {
                     for (String v : sIsbns.split(",")) if (v.trim().length()>0) isbns.add(v.trim());
                 }
                 if (sIsbns13 != null && sIsbns13.trim().length() > 0) {
                     for (String v : sIsbns13.split(",")) if (v.trim().length()>0) isbns13.add(v.trim());
                 }
+                if (sMvIds != null && sMvIds.trim().length() > 0) {
+                    for (String v : sMvIds.split(",")) try { if (v.trim().length()>0) mvIds.add(Integer.valueOf(v.trim())); } catch(Exception ignore) {}
+                }
+                if (sMvId != null && sMvId.trim().length() > 0) {
+                    try { mvIds.add(Integer.valueOf(sMvId.trim())); } catch(Exception ignore) {}
+                }
             }
-            logger.debug("[STATUS] request isbns={} isbns13={}", isbns, isbns13);
+            logger.debug("[STATUS] request isbns={} isbns13={} mvIds={}", isbns, isbns13, mvIds);
 
+            // If mvIds provided -> movie flow
+            if (mvIds != null && mvIds.size() > 0) {
+                java.util.List<java.util.Map<String,Object>> rows = movieReviewDAO.selectStatuses(userId, mvIds);
+                Map<String,Object> map = new HashMap<>();
+                for (Map<String,Object> r : rows) {
+                    Object mvObj = r.get("MV_ID") != null ? r.get("MV_ID") : r.get("mv_id");
+                    String mvKey = mvObj != null ? String.valueOf(mvObj) : null;
+                    Map<String,Object> st = new HashMap<>();
+                    st.put("readYn", r.get("READ_YN"));
+                    st.put("rating", r.get("RATING"));
+                    st.put("cmnt", r.get("CMNT"));
+                    st.put("reviewText", r.get("REVIEW_TEXT"));
+                    if (mvKey != null && mvKey.trim().length()>0) map.put(mvKey, st);
+                }
+                result.put("status", "OK"); result.put("data", map); return result;
+            }
+
+            // book flow (existing)
             java.util.List<java.util.Map<String,Object>> rows = reviewDAO.selectStatuses(userId, isbns, isbns13);
             // build map keyed by ISBN or ISBN13 -> status
             Map<String,Object> map = new HashMap<>();
@@ -177,6 +236,7 @@ public class ReviewController {
             String userId = String.valueOf(u.getId());
             String isbn = null;
             String isbn13 = null;
+            Integer mvId = null;
             String readYn = "Y";
             String contentType = request.getContentType();
             boolean parsedJson = false;
@@ -186,6 +246,7 @@ public class ReviewController {
                     if (payload.get("isbn") != null) isbn = String.valueOf(payload.get("isbn"));
                     if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
                     if (payload.get("readYn") != null) readYn = String.valueOf(payload.get("readYn")).toUpperCase();
+                    if (payload.get("mvId") != null) try { mvId = Integer.valueOf(String.valueOf(payload.get("mvId"))); } catch (Exception ignore) {}
                     parsedJson = true;
                 }
             } catch (Exception ex) { }
@@ -193,35 +254,58 @@ public class ReviewController {
                 String pIsbn = request.getParameter("isbn");
                 String pIsbn13 = request.getParameter("isbn13");
                 String pRead = request.getParameter("readYn");
+                String pMv = request.getParameter("mvId");
                 if (pIsbn != null && pIsbn.trim().length()>0) isbn = pIsbn.trim();
                 if (pIsbn13 != null && pIsbn13.trim().length()>0) isbn13 = pIsbn13.trim();
                 if (pRead != null && pRead.trim().length()>0) readYn = pRead.trim().toUpperCase();
+                if (pMv != null && pMv.trim().length()>0) try { mvId = Integer.valueOf(pMv.trim()); } catch(Exception ignore) {}
             }
-            if ((isbn == null || isbn.trim().length() == 0) && (isbn13 == null || isbn13.trim().length() == 0)) {
-                result.put("status","ERR"); result.put("message","MISSING_ISBN"); return result;
+            if ((isbn == null || isbn.trim().length() == 0) && (isbn13 == null || isbn13.trim().length() == 0) && mvId==null) {
+                result.put("status","ERR"); result.put("message","MISSING_ISBN_OR_MVID"); return result;
             }
 
             // If attempting to unset read (readYn == 'N'), disallow when a rating/comment/review exists
             if ("N".equalsIgnoreCase(readYn)) {
-                java.util.List<String> isbns = new java.util.ArrayList<>();
-                java.util.List<String> isbns13 = new java.util.ArrayList<>();
-                if (isbn != null && isbn.trim().length() > 0) isbns.add(isbn.trim());
-                if (isbn13 != null && isbn13.trim().length() > 0) isbns13.add(isbn13.trim());
-                java.util.List<java.util.Map<String,Object>> rows = reviewDAO.selectStatuses(userId, isbns, isbns13);
-                if (rows != null && rows.size() > 0) {
-                    for (Map<String,Object> r : rows) {
-                        Object ratingObj = r.get("RATING");
-                        Object comnetObj = r.get("CMNT");
-                        Object reviewTextObj = r.get("REVIEW_TEXT");
-                        boolean hasRatingOrComment = (ratingObj != null) || (comnetObj != null && String.valueOf(comnetObj).trim().length() > 0) || (reviewTextObj != null && String.valueOf(reviewTextObj).trim().length() > 0);
-                        if (hasRatingOrComment) {
-                            // refuse to unset read when review/score exists
-                            result.put("status","ERR");
-                            result.put("message","CANNOT_UNSET_READ_HAS_RATING");
-                            return result;
+                if (mvId != null) {
+                    java.util.List<Integer> mvIds = new java.util.ArrayList<>(); mvIds.add(mvId);
+                    java.util.List<java.util.Map<String,Object>> rows = movieReviewDAO.selectStatuses(userId, mvIds);
+                    if (rows != null && rows.size() > 0) {
+                        for (Map<String,Object> r : rows) {
+                            Object ratingObj = r.get("RATING");
+                            Object comnetObj = r.get("CMNT");
+                            Object reviewTextObj = r.get("REVIEW_TEXT");
+                            boolean hasRatingOrComment = (ratingObj != null) || (comnetObj != null && String.valueOf(comnetObj).trim().length() > 0) || (reviewTextObj != null && String.valueOf(reviewTextObj).trim().length() > 0);
+                            if (hasRatingOrComment) {
+                                result.put("status","ERR"); result.put("message","CANNOT_UNSET_READ_HAS_RATING"); return result;
+                            }
+                        }
+                    }
+                } else {
+                    java.util.List<String> isbns = new java.util.ArrayList<>();
+                    java.util.List<String> isbns13 = new java.util.ArrayList<>();
+                    if (isbn != null && isbn.trim().length() > 0) isbns.add(isbn.trim());
+                    if (isbn13 != null && isbn13.trim().length() > 0) isbns13.add(isbn13.trim());
+                    java.util.List<java.util.Map<String,Object>> rows = reviewDAO.selectStatuses(userId, isbns, isbns13);
+                    if (rows != null && rows.size() > 0) {
+                        for (Map<String,Object> r : rows) {
+                            Object ratingObj = r.get("RATING");
+                            Object comnetObj = r.get("CMNT");
+                            Object reviewTextObj = r.get("REVIEW_TEXT");
+                            boolean hasRatingOrComment = (ratingObj != null) || (comnetObj != null && String.valueOf(comnetObj).trim().length() > 0) || (reviewTextObj != null && String.valueOf(reviewTextObj).trim().length() > 0);
+                            if (hasRatingOrComment) {
+                                // refuse to unset read when review/score exists
+                                result.put("status","ERR");
+                                result.put("message","CANNOT_UNSET_READ_HAS_RATING");
+                                return result;
+                            }
                         }
                     }
                 }
+            }
+
+            if (mvId != null) {
+                movieReviewDAO.setReadStatus(userId, mvId, ("Y".equals(readYn) ? "Y" : "N"));
+                result.put("status","OK"); return result;
             }
 
             reviewDAO.setReadStatus(userId, isbn, isbn13, ("Y".equals(readYn) ? "Y" : "N"));
@@ -241,7 +325,7 @@ public class ReviewController {
             if (u == null) { result.put("status","ERR"); result.put("message","NOT_LOGGED_IN"); return result; }
             String userId = String.valueOf(u.getId());
 
-            String isbn = null; String isbn13 = null;
+            String isbn = null; String isbn13 = null; Integer mvId = null;
             String contentType = request.getContentType();
             boolean parsedJson = false;
             try {
@@ -249,18 +333,26 @@ public class ReviewController {
                     Map<String,Object> payload = objectMapper.readValue(request.getInputStream(), Map.class);
                     if (payload.get("isbn") != null) isbn = String.valueOf(payload.get("isbn"));
                     if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
+                    if (payload.get("mvId") != null) try { mvId = Integer.valueOf(String.valueOf(payload.get("mvId"))); } catch(Exception ignore) {}
                     parsedJson = true;
                 }
             } catch (Exception ex) { }
             if (!parsedJson) {
                 String pIsbn = request.getParameter("isbn");
                 String pIsbn13 = request.getParameter("isbn13");
+                String pMv = request.getParameter("mvId");
                 if (pIsbn != null && pIsbn.trim().length()>0) isbn = pIsbn.trim();
                 if (pIsbn13 != null && pIsbn13.trim().length()>0) isbn13 = pIsbn13.trim();
+                if (pMv != null && pMv.trim().length()>0) try { mvId = Integer.valueOf(pMv.trim()); } catch(Exception ignore) {}
             }
 
-            if ((isbn == null || isbn.trim().length() == 0) && (isbn13 == null || isbn13.trim().length() == 0)) {
-                result.put("status","ERR"); result.put("message","MISSING_ISBN"); return result;
+            if ((isbn == null || isbn.trim().length() == 0) && (isbn13 == null || isbn13.trim().length() == 0) && mvId==null) {
+                result.put("status","ERR"); result.put("message","MISSING_ISBN_OR_MVID"); return result;
+            }
+
+            if (mvId != null) {
+                movieReviewDAO.deleteReview(userId, mvId);
+                result.put("status","OK"); return result;
             }
 
             reviewDAO.deleteReview(userId, isbn, isbn13);
@@ -279,7 +371,7 @@ public class ReviewController {
             com.mn.cm.model.User u = (com.mn.cm.model.User) session.getAttribute("USER_SESSION");
             if (u == null) { result.put("status","ERR"); result.put("message","NOT_LOGGED_IN"); return result; }
             String userId = String.valueOf(u.getId());
-            String isbn = null; String isbn13 = null; String regDt = null; String action = null;
+            String isbn = null; String isbn13 = null; String regDt = null; String action = null; Integer mvId = null;
             String contentType = request.getContentType();
             boolean parsedJson = false;
             try {
@@ -289,6 +381,7 @@ public class ReviewController {
                     if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
                     if (payload.get("regDt") != null) regDt = String.valueOf(payload.get("regDt"));
                     if (payload.get("action") != null) action = String.valueOf(payload.get("action"));
+                    if (payload.get("mvId") != null) try { mvId = Integer.valueOf(String.valueOf(payload.get("mvId"))); } catch(Exception ignore) {}
                     parsedJson = true;
                 }
             } catch (Exception ex) { }
@@ -297,37 +390,51 @@ public class ReviewController {
                 if (request.getParameter("isbn13") != null) isbn13 = request.getParameter("isbn13");
                 if (request.getParameter("regDt") != null) regDt = request.getParameter("regDt");
                 if (request.getParameter("action") != null) action = request.getParameter("action");
+                if (request.getParameter("mvId") != null) try { mvId = Integer.valueOf(request.getParameter("mvId")); } catch(Exception ignore) {}
             }
-            if ((isbn == null || isbn.trim().length() == 0) && (isbn13 == null || isbn13.trim().length() == 0)) {
-                result.put("status","ERR"); result.put("message","MISSING_ISBN"); return result; }
+            if ((isbn == null || isbn.trim().length() == 0) && (isbn13 == null || isbn13.trim().length() == 0) && mvId==null) {
+                result.put("status","ERR"); result.put("message","MISSING_ISBN_OR_MVID"); return result; }
             if (regDt == null || regDt.trim().length() == 0) { result.put("status","ERR"); result.put("message","MISSING_REGDT"); return result; }
             if (!"like".equals(action) && !"dislike".equals(action)) { result.put("status","ERR"); result.put("message","INVALID_ACTION"); return result; }
 
             // server-side: check existing reaction for this user+review to prevent duplicate same-action votes
             try {
-                Integer existing = reviewDAO.selectUserReaction(userId, isbn, isbn13, regDt);
-                if (existing != null) {
-                    String existingAction = (existing == 0) ? "like" : (existing == 1) ? "dislike" : null;
-                    if (existingAction != null && existingAction.equals(action)) {
-                        // Toggle off: user clicked same action again -> delete their reaction
-                        try {
-                            reviewDAO.deleteUserReaction(userId, isbn, isbn13, regDt);
-                            java.util.Map<String,Object> rowAfter = reviewDAO.selectReviewByKey(isbn, isbn13, regDt);
-                            Map<String,Object> dataAfter = new HashMap<>();
-                            if (rowAfter != null) {
-                                dataAfter.put("lkCnt", rowAfter.get("LK_CNT") != null ? rowAfter.get("LK_CNT") : rowAfter.get("lk_cnt") );
-                                dataAfter.put("dslkCnt", rowAfter.get("DSLK_CNT") != null ? rowAfter.get("DSLK_CNT") : rowAfter.get("dslk_cnt") );
+                if (mvId != null) {
+                    Integer existing = movieReviewDAO.selectUserReaction(userId, mvId, regDt);
+                    if (existing != null) {
+                        String existingAction = (existing == 0) ? "like" : (existing == 1) ? "dislike" : null;
+                        if (existingAction != null && existingAction.equals(action)) {
+                            // Toggle off: user clicked same action again -> delete their reaction
+                            try {
+                                movieReviewDAO.deleteUserReaction(userId, mvId, regDt);
+                                java.util.Map<String,Object> rowAfter = movieReviewDAO.selectReviewByKey(mvId, regDt);
+                                Map<String,Object> dataAfter = new HashMap<>();
+                                if (rowAfter != null) {
+                                    dataAfter.put("lkCnt", rowAfter.get("LK_CNT") != null ? rowAfter.get("LK_CNT") : rowAfter.get("lk_cnt") );
+                                    dataAfter.put("dslkCnt", rowAfter.get("DSLK_CNT") != null ? rowAfter.get("DSLK_CNT") : rowAfter.get("dslk_cnt") );
+                                }
+                                result.put("status","OK"); result.put("data", dataAfter); return result;
+                            } catch (Exception ex) {
+                                logger.error("[VOTE] toggle-off delete failed", ex);
+                                result.put("status","ERR"); result.put("message","DELETE_FAILED"); return result;
                             }
-                            result.put("status","OK"); result.put("data", dataAfter); return result;
-                        } catch (Exception ex) {
-                            logger.error("[VOTE] toggle-off delete failed", ex);
-                            result.put("status","ERR"); result.put("message","DELETE_FAILED"); return result;
                         }
                     }
                 }
             } catch (Exception ex) {
                 // ignore and proceed to allow DAO to handle idempotency if needed
                 logger.info("[VOTE] existing reaction check failed: {}", ex.getMessage());
+            }
+
+            if (mvId != null) {
+                movieReviewDAO.voteReview(userId, mvId, regDt, action);
+                java.util.Map<String,Object> row = movieReviewDAO.selectReviewByKey(mvId, regDt);
+                Map<String,Object> data = new HashMap<>();
+                if (row != null) {
+                    data.put("lkCnt", row.get("LK_CNT") != null ? row.get("LK_CNT") : row.get("lk_cnt") );
+                    data.put("dslkCnt", row.get("DSLK_CNT") != null ? row.get("DSLK_CNT") : row.get("dslk_cnt") );
+                }
+                result.put("status","OK"); result.put("data", data); return result;
             }
 
             // Pass userId so DAO can record per-user reactions in MN_BK_LIKE
@@ -351,7 +458,7 @@ public class ReviewController {
     public Map<String,Object> listReviews(HttpServletRequest request) {
         Map<String,Object> result = new HashMap<>();
         try {
-            String isbn = null; String isbn13 = null; Integer limit = 10;
+            String isbn = null; String isbn13 = null; Integer limit = 10; Integer mvId = null;
             String contentType = request.getContentType();
             boolean parsedJson = false;
             try {
@@ -362,6 +469,7 @@ public class ReviewController {
                     if (payload.get("limit") != null) {
                         try { limit = Integer.valueOf(String.valueOf(payload.get("limit"))); } catch(Exception e){ }
                     }
+                    if (payload.get("mvId") != null) try { mvId = Integer.valueOf(String.valueOf(payload.get("mvId"))); } catch(Exception ignore) {}
                     parsedJson = true;
                 }
             } catch (Exception ex) { }
@@ -369,11 +477,45 @@ public class ReviewController {
                 String pIsbn = request.getParameter("isbn");
                 String pIsbn13 = request.getParameter("isbn13");
                 String pLimit = request.getParameter("limit");
+                String pMv = request.getParameter("mvId");
                 if (pIsbn != null && pIsbn.trim().length()>0) isbn = pIsbn.trim();
                 if (pIsbn13 != null && pIsbn13.trim().length()>0) isbn13 = pIsbn13.trim();
                 if (pLimit != null) {
                     try { limit = Integer.valueOf(pLimit); } catch(Exception e) {}
                 }
+                if (pMv != null && pMv.trim().length()>0) try { mvId = Integer.valueOf(pMv.trim()); } catch(Exception ignore) {}
+            }
+
+            if (mvId != null) {
+                java.util.List<java.util.Map<String,Object>> rows = movieReviewDAO.selectReviews(mvId, limit);
+                try {
+                    java.time.format.DateTimeFormatter dtf = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+                    for (java.util.Map<String,Object> r : rows) {
+                        if (r == null) continue;
+                        Object reg = r.get("REG_DT");
+                        if (reg == null) reg = r.get("reg_dt");
+                        if (reg != null) {
+                            try {
+                                if (reg instanceof java.time.LocalDateTime) {
+                                    r.put("REG_DT", ((java.time.LocalDateTime)reg).format(dtf));
+                                } else if (reg instanceof java.sql.Timestamp) {
+                                    java.sql.Timestamp ts = (java.sql.Timestamp) reg;
+                                    r.put("REG_DT", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date(ts.getTime())));
+                                } else if (reg instanceof java.util.Date) {
+                                    r.put("REG_DT", new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format((java.util.Date)reg));
+                                } else if (reg instanceof String) {
+                                    r.put("REG_DT", String.valueOf(reg));
+                                } else {
+                                    r.put("REG_DT", String.valueOf(reg));
+                                }
+                            } catch (Exception ex) {
+                                try { r.put("REG_DT", String.valueOf(reg)); } catch (Exception ignore) {}
+                            }
+                        }
+                    }
+                } catch (Exception ex) { }
+
+                result.put("status","OK"); result.put("data", rows); return result;
             }
 
             java.util.List<java.util.Map<String,Object>> rows = reviewDAO.selectReviews(isbn, isbn13, limit);
@@ -430,7 +572,7 @@ public class ReviewController {
         // Log immediately on entry so we know the endpoint was invoked
         logger.info("[SUMMARY] endpoint invoked: uri={}, remoteAddr={}, query={}", request.getRequestURI(), request.getRemoteAddr(), request.getQueryString());
         try {
-            String isbn = null; String isbn13 = null;
+            String isbn = null; String isbn13 = null; Integer mvId = null;
             String contentType = request.getContentType();
             logger.info("[SUMMARY] contentType={}", contentType);
             boolean parsedJson = false;
@@ -440,6 +582,7 @@ public class ReviewController {
                     // support single-string keys
                     if (payload.get("isbn") != null) isbn = String.valueOf(payload.get("isbn"));
                     if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
+                    if (payload.get("mvId") != null) try { mvId = Integer.valueOf(String.valueOf(payload.get("mvId"))); } catch(Exception ignore) {}
                     // also support arrays (isbns / isbns13) where client might send arrays
                     try {
                         if ((isbn == null || isbn.trim().length() == 0) && payload.get("isbns") instanceof java.util.List) {
@@ -452,15 +595,46 @@ public class ReviewController {
                         }
                     } catch (Exception ignore) {}
                     parsedJson = true;
-                    logger.info("[SUMMARY] parsed JSON payload: isbn={}, isbn13={}", isbn, isbn13);
+                    logger.info("[SUMMARY] parsed JSON payload: isbn={}, isbn13={}, mvId={}", isbn, isbn13, mvId);
                 }
             } catch (Exception ex) { logger.info("[SUMMARY] json parse attempt failed: {}", ex.getMessage()); }
             if (!parsedJson) {
                 String pIsbn = request.getParameter("isbn");
                 String pIsbn13 = request.getParameter("isbn13");
+                String pMv = request.getParameter("mvId");
                 if (pIsbn != null && pIsbn.trim().length()>0) isbn = pIsbn.trim();
                 if (pIsbn13 != null && pIsbn13.trim().length()>0) isbn13 = pIsbn13.trim();
-                logger.info("[SUMMARY] parsed params: isbn={}, isbn13={}", isbn, isbn13);
+                if (pMv != null && pMv.trim().length()>0) try { mvId = Integer.valueOf(pMv.trim()); } catch(Exception ignore) {}
+                logger.info("[SUMMARY] parsed params: isbn={}, isbn13={}, mvId={}", isbn, isbn13, mvId);
+            }
+
+            if (mvId != null) {
+                java.util.Map<String,Object> row = movieReviewDAO.selectMovieSummary(mvId);
+                Map<String,Object> data = new HashMap<>();
+                if (row != null) {
+                    Object avg = row.get("AVG_RATING") != null ? row.get("AVG_RATING") : row.get("avg_rating");
+                    Object rCnt = row.get("RATING_CNT") != null ? row.get("RATING_CNT") : row.get("rating_cnt");
+                    Object readCnt = row.get("READ_CNT") != null ? row.get("READ_CNT") : row.get("read_cnt");
+                    Object reviewWithTextCnt = row.get("REVIEW_WITH_TEXT_CNT") != null ? row.get("REVIEW_WITH_TEXT_CNT") : row.get("review_with_text_cnt");
+                    Object likeCnt = null;
+                    if (reviewWithTextCnt != null) {
+                        likeCnt = reviewWithTextCnt;
+                    } else {
+                        likeCnt = row.get("LIKE_CNT") != null ? row.get("LIKE_CNT") : row.get("like_cnt");
+                    }
+
+                    data.put("avgRating", avg != null ? avg : null);
+                    data.put("ratingCount", rCnt != null ? rCnt : 0);
+                    data.put("readCount", readCnt != null ? readCnt : 0);
+                    data.put("likeCount", likeCnt != null ? likeCnt : 0);
+                } else {
+                    data.put("avgRating", null);
+                    data.put("ratingCount", 0);
+                    data.put("readCount", 0);
+                    data.put("likeCount", 0);
+                }
+                logger.info("[SUMMARY] returning data={}", data);
+                result.put("status","OK"); result.put("data", data); return result;
             }
 
             java.util.Map<String,Object> row = reviewDAO.selectBookSummary(isbn, isbn13);
@@ -506,7 +680,7 @@ public class ReviewController {
             if (u == null) { result.put("status","ERR"); result.put("message","NOT_LOGGED_IN"); return result; }
             String userId = String.valueOf(u.getId());
 
-            String isbn = null; String isbn13 = null; String regDt = null;
+            String isbn = null; String isbn13 = null; String regDt = null; Integer mvId = null;
             String contentType = request.getContentType();
             boolean parsedJson = false;
             try {
@@ -515,18 +689,28 @@ public class ReviewController {
                     if (payload.get("isbn") != null) isbn = String.valueOf(payload.get("isbn"));
                     if (payload.get("isbn13") != null) isbn13 = String.valueOf(payload.get("isbn13"));
                     if (payload.get("regDt") != null) regDt = String.valueOf(payload.get("regDt"));
+                    if (payload.get("mvId") != null) try { mvId = Integer.valueOf(String.valueOf(payload.get("mvId"))); } catch(Exception ignore) {}
                     parsedJson = true;
-                    logger.info("[REACTION] parsed JSON payload: isbn={}, isbn13={}, regDt={}", isbn, isbn13, regDt);
+                    logger.info("[REACTION] parsed JSON payload: isbn={}, isbn13={}, regDt={}, mvId={}", isbn, isbn13, regDt, mvId);
                 }
             } catch (Exception ex) { logger.info("[REACTION] json parse failed: {}", ex.getMessage()); }
             if (!parsedJson) {
                 if (request.getParameter("isbn") != null) isbn = request.getParameter("isbn");
                 if (request.getParameter("isbn13") != null) isbn13 = request.getParameter("isbn13");
                 if (request.getParameter("regDt") != null) regDt = request.getParameter("regDt");
-                logger.info("[REACTION] parsed params: isbn={}, isbn13={}, regDt={}", isbn, isbn13, regDt);
+                if (request.getParameter("mvId") != null) try { mvId = Integer.valueOf(request.getParameter("mvId")); } catch(Exception ignore) {}
+                logger.info("[REACTION] parsed params: isbn={}, isbn13={}, regDt={}, mvId={}", isbn, isbn13, regDt, mvId);
             }
 
             if ((regDt == null || regDt.trim().length() == 0) ) { result.put("status","ERR"); result.put("message","MISSING_REGDT"); return result; }
+
+            if (mvId != null) {
+                Integer reaction = movieReviewDAO.selectUserReaction(userId, mvId, regDt);
+                Map<String,Object> data = new HashMap<>();
+                data.put("reaction", reaction);
+                result.put("status","OK"); result.put("data", data);
+                return result;
+            }
 
             Integer reaction = reviewDAO.selectUserReaction(userId, isbn, isbn13, regDt);
             Map<String,Object> data = new HashMap<>();

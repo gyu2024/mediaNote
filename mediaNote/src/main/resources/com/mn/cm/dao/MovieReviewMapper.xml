@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mn.cm.dao.MovieReviewMapper">
+
+    <insert id="insertOrUpdateReview" parameterType="map">
+        <!-- Upsert by unique(USER_ID, MV_ID) -->
+        INSERT INTO MN_MV_RVW (MV_ID, USER_ID, READ_YN, RATING, CMNT, REVIEW_TEXT, REG_DT, MOD_DT)
+        VALUES (#{mvId}, #{userId}, #{readYn}, #{rating}, #{cmnt}, #{reviewText}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            READ_YN = VALUES(READ_YN),
+            RATING = VALUES(RATING),
+            CMNT = VALUES(CMNT),
+            REVIEW_TEXT = VALUES(REVIEW_TEXT),
+            MOD_DT = NOW()
+    </insert>
+
+    <insert id="insertOrUpdateRead" parameterType="map">
+        INSERT INTO MN_MV_RVW (MV_ID, USER_ID, READ_YN, REG_DT, MOD_DT)
+        VALUES (#{mvId}, #{userId}, #{readYn}, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE
+            READ_YN = VALUES(READ_YN),
+            MOD_DT = NOW()
+    </insert>
+
+    <select id="selectStatuses" parameterType="map" resultType="map">
+        SELECT MV_ID, READ_YN, RATING, CMNT, REVIEW_TEXT
+        FROM MN_MV_RVW
+        WHERE USER_ID = #{userId}
+        <choose>
+            <when test="mvIds != null and mvIds.size() &gt; 0">
+                AND MV_ID IN
+                <foreach item="mvId" collection="mvIds" open="(" separator="," close=")">
+                    #{mvId}
+                </foreach>
+            </when>
+            <otherwise>
+                AND 1 = 0
+            </otherwise>
+        </choose>
+    </select>
+
+    <select id="selectReviews" parameterType="map" resultType="map">
+        SELECT r.RATING as RATING, r.CMNT as CMNT, r.REVIEW_TEXT as REVIEW_TEXT, r.REG_DT as REG_DT,
+               (SELECT COUNT(*) FROM MN_MV_LIKE l WHERE l.RVW_ID = r.RVW_ID AND l.LIKE_TYPE = 0) AS LK_CNT,
+               (SELECT COUNT(*) FROM MN_MV_LIKE l WHERE l.RVW_ID = r.RVW_ID AND l.LIKE_TYPE = 1) AS DSLK_CNT,
+               m.NICKNAME as NICKNAME
+        FROM MN_MV_RVW r
+        LEFT JOIN MN_USR_MST m ON r.USER_ID = m.USER_ID
+        WHERE r.MV_ID = #{mvId}
+        AND (
+            r.RATING IS NOT NULL
+            OR (r.CMNT IS NOT NULL AND LENGTH(TRIM(r.CMNT)) &gt; 0)
+            OR (r.REVIEW_TEXT IS NOT NULL AND LENGTH(TRIM(r.REVIEW_TEXT)) &gt; 0)
+        )
+        ORDER BY r.REG_DT DESC
+        <if test="limit != null">
+            LIMIT #{limit}
+        </if>
+    </select>
+
+    <select id="selectMovieSummary" parameterType="map" resultType="map">
+        SELECT
+            AVG(r.RATING) AS AVG_RATING,
+            SUM(CASE WHEN r.RATING IS NOT NULL THEN 1 ELSE 0 END) AS RATING_CNT,
+            SUM(CASE WHEN r.READ_YN = 'Y' THEN 1 ELSE 0 END) AS READ_CNT,
+            (
+                SELECT COUNT(*) FROM MN_MV_LIKE l
+                JOIN MN_MV_RVW r2 ON l.RVW_ID = r2.RVW_ID
+                WHERE l.LIKE_TYPE = 0
+                AND r2.MV_ID = #{mvId}
+            ) AS LIKE_CNT,
+            SUM(CASE WHEN (r.CMNT IS NOT NULL AND LENGTH(TRIM(r.CMNT)) > 0) OR (r.REVIEW_TEXT IS NOT NULL AND LENGTH(TRIM(r.REVIEW_TEXT)) > 0) THEN 1 ELSE 0 END) AS REVIEW_WITH_TEXT_CNT
+        FROM MN_MV_RVW r
+        WHERE r.MV_ID = #{mvId}
+    </select>
+
+    <delete id="deleteReview" parameterType="map">
+        DELETE FROM MN_MV_RVW
+        WHERE USER_ID = #{userId}
+        AND MV_ID = #{mvId}
+    </delete>
+
+    <update id="voteReview" parameterType="map">
+        INSERT INTO MN_MV_LIKE (RVW_ID, USER_ID, LIKE_TYPE, REG_DT)
+        SELECT r.RVW_ID, #{userId}, (CASE WHEN #{action} = 'like' THEN 0 ELSE 1 END), NOW()
+        FROM MN_MV_RVW r
+        WHERE r.MV_ID = #{mvId}
+        AND r.REG_DT = STR_TO_DATE(#{regDt}, '%Y-%m-%d %H:%i:%s')
+        ON DUPLICATE KEY UPDATE
+            LIKE_TYPE = VALUES(LIKE_TYPE),
+            REG_DT = VALUES(REG_DT);
+    </update>
+
+    <select id="selectReviewByKey" parameterType="map" resultType="map">
+        SELECT RATING as RATING, CMNT as CMNT, REVIEW_TEXT as REVIEW_TEXT, REG_DT as REG_DT,
+               (SELECT COUNT(*) FROM MN_MV_LIKE l WHERE l.RVW_ID = rv.RVW_ID AND l.LIKE_TYPE = 0) AS LK_CNT,
+               (SELECT COUNT(*) FROM MN_MV_LIKE l WHERE l.RVW_ID = rv.RVW_ID AND l.LIKE_TYPE = 1) AS DSLK_CNT,
+               USER_ID as USER_ID
+        FROM MN_MV_RVW rv
+        WHERE MV_ID = #{mvId}
+        AND REG_DT = STR_TO_DATE(#{regDt}, '%Y-%m-%d %H:%i:%s')
+        LIMIT 1
+    </select>
+
+    <select id="selectUserReaction" parameterType="map" resultType="int" >
+        SELECT l.LIKE_TYPE
+        FROM MN_MV_LIKE l
+        JOIN MN_MV_RVW r ON l.RVW_ID = r.RVW_ID
+        WHERE l.USER_ID = #{userId}
+        AND r.MV_ID = #{mvId}
+        AND r.REG_DT = STR_TO_DATE(#{regDt}, '%Y-%m-%d %H:%i:%s')
+        LIMIT 1
+    </select>
+
+   <delete id="deleteUserReaction" parameterType="map">
+        DELETE l
+        FROM MN_MV_LIKE l
+        JOIN MN_MV_RVW r ON l.RVW_ID = r.RVW_ID
+        WHERE l.USER_ID = #{userId}
+        AND r.MV_ID = #{mvId}
+        AND r.REG_DT = STR_TO_DATE(#{regDt}, '%Y-%m-%d %H:%i:%s')
+    </delete>
+
+    <select id="selectReadByUser" parameterType="map" resultType="map">
+        SELECT r.MV_ID as mvId, r.RATING as rating, r.CMNT as cmnt, r.REVIEW_TEXT as reviewText, r.REG_DT as regDt, r.MOD_DT as modDt,
+               m.TITLE as title, m.POSTER_PATH as posterPath, m.RELEASE_DATE as releaseDate
+        FROM MN_MV_RVW r
+        LEFT JOIN MN_MV_MST m ON r.MV_ID = m.MV_ID
+        WHERE r.USER_ID = #{userId}
+          AND r.READ_YN = 'Y'
+        ORDER BY r.MOD_DT DESC
+        <if test="limit != null">
+            LIMIT #{offset}, #{limit}
+        </if>
+    </select>
+
+</mapper>

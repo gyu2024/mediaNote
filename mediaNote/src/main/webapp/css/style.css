@@ -1794,7 +1794,7 @@ input[type="text"] {
     .user-badge { right: 12px; top: 15px; }
     /* ensure the search-bar offset matches the reduced header height */
     :root { --mn-header-height: 48px; }
-    .search-bar { top: 125px; padding: 8px 0; }
+    .search-bar { top: 140px; padding: 8px 0; }
 }
 
 /* On larger viewports, hide the main .container until a search has been performed.
