@@ -14,6 +14,8 @@ import org.springframework.http.converter.StringHttpMessageConverter;
 import java.nio.charset.StandardCharsets;
 import com.mn.cm.model.AladinBook;
 import com.mn.cm.dao.AladinBookDAO;
+import com.mn.cm.dao.ReviewDAO;
+import com.mn.cm.model.User;
 
 @Controller
 public class MNCM001Controller {
@@ -21,6 +23,9 @@ public class MNCM001Controller {
 	// 1. DAO를 필드 주입으로 선언합니다.
     @Autowired
     private AladinBookDAO aladinBookDAO;
+    // 로그인 사용자 리뷰/읽음 상태 조회를 위한 DAO
+    @Autowired
+    private ReviewDAO reviewDAO;
 
 	@RequestMapping(value="/hello", produces="application/json; charset=UTF-8")
     @ResponseBody
@@ -67,6 +72,12 @@ public class MNCM001Controller {
             System.out.println("[알라딘API] 아이템 개수: " + items.length());
             JSONArray books = new JSONArray();
             System.out.println("[알라딘API] 데이터 추출 시작 (총 " + items.length() + "건)");
+
+            // 로그인 사용자 확인 및 배치 상태 조회를 위한 ISBN 수집
+            User user = null;
+            try { user = (User) request.getSession().getAttribute("USER_SESSION"); } catch (Exception ignore) {}
+            java.util.List<String> batchIsbns = new java.util.ArrayList<>();
+            java.util.List<String> batchIsbns13 = new java.util.ArrayList<>();
 
             for (int i = 0; i < items.length(); i++) {
                 JSONObject item = items.getJSONObject(i);
@@ -121,6 +132,11 @@ public class MNCM001Controller {
                 book.put("isbn13"	, isbn13);
                 
                 books.put(book);
+                // ISBN 수집 (로그인된 경우 나중에 상태 조회)
+                try {
+                    if (isbn != null && isbn.trim().length() > 0) batchIsbns.add(isbn.trim());
+                    if (isbn13 != null && isbn13.trim().length() > 0) batchIsbns13.add(isbn13.trim());
+                } catch (Exception ignore) {}
                 // DB 저장
                 AladinBook bookEntity = new AladinBook();
                 bookEntity.setIsbn13(isbn13);
@@ -149,6 +165,59 @@ public class MNCM001Controller {
                 } catch (Exception ex) {
                     ex.printStackTrace();
                 }
+            }
+            // 로그인 사용자라면, 수집된 ISBN들로 리뷰/읽음 상태를 DB에서 배치 조회하여 books에 플래그 추가
+            try {
+                if (user != null && (batchIsbns.size() > 0 || batchIsbns13.size() > 0)) {
+                    // 중복 제거
+                    batchIsbns = new java.util.ArrayList<>(new java.util.LinkedHashSet<>(batchIsbns));
+                    batchIsbns13 = new java.util.ArrayList<>(new java.util.LinkedHashSet<>(batchIsbns13));
+                    java.util.List<java.util.Map<String,Object>> rows = reviewDAO.selectStatuses(String.valueOf(user.getId()), batchIsbns, batchIsbns13);
+                    // ISBN/ISBN13 기준으로 상태 맵 구성
+                    java.util.Map<String, java.util.Map<String,Object>> statusByKey = new java.util.HashMap<>();
+                    for (java.util.Map<String,Object> r : rows) {
+                        if (r == null) continue;
+                        String kIsbn = r.get("ISBN") != null ? String.valueOf(r.get("ISBN")) : null;
+                        String kIsbn13 = r.get("ISBN13") != null ? String.valueOf(r.get("ISBN13")) : null;
+                        java.util.Map<String,Object> st = new java.util.HashMap<>();
+                        st.put("READ_YN", r.get("READ_YN"));
+                        st.put("RATING", r.get("RATING"));
+                        st.put("CMNT", r.get("CMNT"));
+                        st.put("REVIEW_TEXT", r.get("REVIEW_TEXT"));
+                        if (kIsbn != null && !kIsbn.trim().isEmpty()) statusByKey.put(kIsbn, st);
+                        if (kIsbn13 != null && !kIsbn13.trim().isEmpty()) statusByKey.put(kIsbn13, st);
+                    }
+                    // books 배열을 돌면서 각 아이템에 userHasReview/userRead 플래그 주입
+                    for (int i = 0; i < books.length(); i++) {
+                        try {
+                            JSONObject b = books.getJSONObject(i);
+                            String bi = b.optString("isbn");
+                            String bi13 = b.optString("isbn13");
+                            java.util.Map<String,Object> st = null;
+                            if (bi != null && statusByKey.containsKey(bi)) st = statusByKey.get(bi);
+                            else if (bi13 != null && statusByKey.containsKey(bi13)) st = statusByKey.get(bi13);
+                            boolean hasReview = false;
+                            boolean hasRead = false;
+                            if (st != null) {
+                                Object ratingObj = st.get("RATING");
+                                Object cmntObj = st.get("CMNT");
+                                Object reviewTextObj = st.get("REVIEW_TEXT");
+                                if (ratingObj != null) hasReview = true;
+                                if (!hasReview && cmntObj != null && String.valueOf(cmntObj).trim().length() > 0) hasReview = true;
+                                if (!hasReview && reviewTextObj != null && String.valueOf(reviewTextObj).trim().length() > 0) hasReview = true;
+                                Object ryn = st.get("READ_YN");
+                                if (ryn != null) {
+                                    String s = String.valueOf(ryn).trim();
+                                    if ("Y".equalsIgnoreCase(s) || "1".equals(s) || "true".equalsIgnoreCase(s)) hasRead = true;
+                                }
+                            }
+                            b.put("userHasReview", hasReview);
+                            b.put("userRead", hasRead);
+                        } catch (Exception ignore) {}
+                    }
+                }
+            } catch (Exception ex) {
+                System.out.println("[알라딘API] 사용자 리뷰/읽음 상태 주입 실패: " + ex.getMessage());
             }
             System.out.println("[알라딘API] 결과 반환: " + books.length() + "권");
             return books.toString();

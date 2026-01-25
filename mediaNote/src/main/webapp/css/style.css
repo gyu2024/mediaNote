@@ -149,6 +149,7 @@ input[type="text"] {
 /* wishlist button styling */
 .btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
 .btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
+/* Explicit blue active state for review button when a review exists */
 
 /* Sticky search bar (appears below sticky header) */
 .search-bar {
@@ -436,6 +437,11 @@ input[type="text"] {
 .btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
 .btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
 .btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
+
+/* wishlist button styling */
+.btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
+.btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
 
 /* Sticky search bar (appears below sticky header) */
 .search-bar {
@@ -578,6 +584,10 @@ input[type="text"] {
 .btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
 .btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
 .btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
+/* wishlist button styling */
+.btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
+.btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
 
 /* Sticky search bar (appears below sticky header) */
 .search-bar {
@@ -720,6 +730,11 @@ input[type="text"] {
 .btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
 .btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
 .btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
+
+/* wishlist button styling */
+.btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
+.btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
 
 /* Sticky search bar (appears below sticky header) */
 .search-bar {
@@ -862,148 +877,11 @@ input[type="text"] {
 .btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
 .btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
 .btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
 
-/* Sticky search bar (appears below sticky header) */
-.search-bar {
-    position: sticky;
-    top: 56px; /* sit just beneath the sticky header (adjust if header height changes) */
-    z-index: 1050; /* below header (1100) but above page content */
-    background: #ffffff; /* match page background so it looks integrated */
-    padding: 10px 0; /* vertical breathing room */
-    border-bottom: 1px solid rgba(0,0,0,0.04);
-    box-shadow: 0 6px 18px rgba(2,6,23,0.04);
-}
-
-.search-bar .input-row { background: transparent; padding: 0; }
-
-/* Responsive variables for meta/action spacing (adjusted per-breakpoint below) */
-:root {
-    --meta-bottom-gap: 12px; /* distance between bottom of details and top of actions */
-    --action-height: 50px;   /* height of action area (buttons) */
-}
-
-.container {
-    background: #fff;
-    padding: 20px;
-    border-radius: 12px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.08);
-    width: 100%;
-    margin: 0 auto;
-}
-
-/* Sticky header styles */
-.site-header {
-    position: sticky;
-    top: 0;
-    z-index: 1100; /* above page content but below modals (modals use 1200) */
-    background: #ffffff; /* match container background */
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center; /* logo centered by default */
-    border-bottom: 1px solid rgba(0,0,0,0.04);
-    box-shadow: 0 2px 8px rgba(2,6,23,0.04);
-}
-
-/* ensure content isn't hidden under sticky header — give global top padding equal to header height on .container parent */
-.container {
-    padding-top: calc(20px + 56px); /* original 20px + estimated header height (56px) */
-}
-
-.logo {
-    font-size: 30px;
-    font-weight: 800;
-    color: #007bff;
-    text-align: center;
-    margin-bottom: 30px;
-    margin-top: 30px;
-}
-
-/* user-badge positioned on the right within the header */
-.user-badge {
-    position: absolute;
-    right: 18px;
-    top: 12px;
-    font-size: 13px;
-    line-height: 1;
-}
-
-/* 검색바 영역 */
-.input-row {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 15px;
-}
-
-select {
-    flex: 3;
-    min-width: 0; /* 폴드 삐져나옴 방지 */
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-}
-
-input[type="text"] {
-    flex: 7;
-    min-width: 0; /* 폴드 삐져나옴 방지 */
-    padding: 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    font-size: 16px;
-}
-
-/* 책 옵션 영역 (초기 숨김) */
-.book-extra {
-    display: none;
-    background: #f8f9ff;
-    padding: 15px;
-    border-radius: 8px;
-    margin-bottom: 15px;
-    border: 1px solid #e0e7ff;
-}
-
-.option-section { margin-bottom: 10px; }
-.option-title { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
-.radio-group { display: flex; gap: 15px; }
-
-/* 결과 영역 (쿠팡 스타일) */
-.result-table { width: 100%; border-collapse: collapse; display: block; }
-#resultArea { margin-top: 20px; border-top: 1px solid #eee; overflow-x: auto; }
-.result-table tr { border-bottom: 1px solid #f0f0f0; display: flex; align-items: stretch; flex-wrap: nowrap; gap: 12px; width: 100%; box-sizing: border-box; min-width: 0; }
-.result-table td { padding: 16px 0; vertical-align: top; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
-
-.info-cover { flex: 0 0 100px; padding-right: 0; display: flex; align-items: stretch; }
-.info-cover img { height: 140px; width: auto; display: block; border-radius: 4px; object-fit: cover; }
-
-.info-details { display: flex; flex-direction: column; gap: 8px; position: relative; padding-right: 140px; /* responsive min-height: scales with viewport width but clamped */
-    min-height: clamp(140px, 16vw, 220px);
-    padding-bottom: 12px; flex: 1 1 0%; height: 100%; padding-left: 64px; min-width: 0; }
-/* place meta and actions using flex flow so actions sit at the bottom */
-.info-meta { left: 4px; /* bottom is responsive via CSS variables */ bottom: calc(var(--meta-bottom-gap) + var(--action-height) -14px); text-align: left; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
-.info-actions { position: absolute; right: 12px; bottom: 2px; display: flex; gap: 8px; align-items: center; justify-content: flex-end; z-index: 2; }
-
-.info-title { font-size: 16px; font-weight: 700; color: #111; text-align: left; margin-left: 0; padding-left: 0; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; word-break: break-word; }
-.info-author {
-    font-size: 11px;
-    color: #555;
-    /* Limit author to max 2 lines with ellipsis */
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.2;
-    /* reserve space for 2 lines to avoid layout shift */
-    max-height: calc(2 * 1.2em);
-}
-.info-publisher-date { font-size: 12px; color: #999; }
-
-/* make buttons emoji-only, circular and compact */
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0; width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 1px solid #ddd; background: #fff; cursor: pointer; font-weight: 700; font-size: 15px; }
-.btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(0,123,255,0.12); }
-.btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
-.btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
-.btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* wishlist button styling */
+.btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
+.btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
 
 /* Sticky search bar (appears below sticky header) */
 .search-bar {
@@ -1146,6 +1024,11 @@ input[type="text"] {
 .btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
 .btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
 .btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
+
+/* wishlist button styling */
+.btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
+.btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
 
 /* Sticky search bar (appears below sticky header) */
 .search-bar {
@@ -1288,6 +1171,305 @@ input[type="text"] {
 .btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
 .btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
 .btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
+
+/* wishlist button styling */
+.btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
+.btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
+
+/* Sticky search bar (appears below sticky header) */
+.search-bar {
+    position: sticky;
+    top: 56px; /* sit just beneath the sticky header (adjust if header height changes) */
+    z-index: 1050; /* below header (1100) but above page content */
+    background: #ffffff; /* match page background so it looks integrated */
+    padding: 10px 0; /* vertical breathing room */
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    box-shadow: 0 6px 18px rgba(2,6,23,0.04);
+}
+
+.search-bar .input-row { background: transparent; padding: 0; }
+
+/* Responsive variables for meta/action spacing (adjusted per-breakpoint below) */
+:root {
+    --meta-bottom-gap: 12px; /* distance between bottom of details and top of actions */
+    --action-height: 50px;   /* height of action area (buttons) */
+}
+
+.container {
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* Sticky header styles */
+.site-header {
+    position: sticky;
+    top: 0;
+    z-index: 1100; /* above page content but below modals (modals use 1200) */
+    background: #ffffff; /* match container background */
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* logo centered by default */
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    box-shadow: 0 2px 8px rgba(2,6,23,0.04);
+}
+
+/* ensure content isn't hidden under sticky header — give global top padding equal to header height on .container parent */
+.container {
+    padding-top: calc(20px + 56px); /* original 20px + estimated header height (56px) */
+}
+
+.logo {
+    font-size: 30px;
+    font-weight: 800;
+    color: #007bff;
+    text-align: center;
+    margin-bottom: 30px;
+    margin-top: 30px;
+}
+
+/* user-badge positioned on the right within the header */
+.user-badge {
+    position: absolute;
+    right: 18px;
+    top: 12px;
+    font-size: 13px;
+    line-height: 1;
+}
+
+/* 검색바 영역 */
+.input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+select {
+    flex: 3;
+    min-width: 0; /* 폴드 삐져나옴 방지 */
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+
+input[type="text"] {
+    flex: 7;
+    min-width: 0; /* 폴드 삐져나옴 방지 */
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+/* 책 옵션 영역 (초기 숨김) */
+.book-extra {
+    display: none;
+    background: #f8f9ff;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #e0e7ff;
+}
+
+.option-section { margin-bottom: 10px; }
+.option-title { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+.radio-group { display: flex; gap: 15px; }
+
+/* 결과 영역 (쿠팡 스타일) */
+.result-table { width: 100%; border-collapse: collapse; display: block; }
+#resultArea { margin-top: 20px; border-top: 1px solid #eee; overflow-x: auto; }
+.result-table tr { border-bottom: 1px solid #f0f0f0; display: flex; align-items: stretch; flex-wrap: nowrap; gap: 12px; width: 100%; box-sizing: border-box; min-width: 0; }
+.result-table td { padding: 16px 0; vertical-align: top; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+.info-cover { flex: 0 0 100px; padding-right: 0; display: flex; align-items: stretch; }
+.info-cover img { height: 150px; width: auto; display: block; border-radius: 4px; object-fit: cover; }
+
+.info-details { display: flex; flex-direction: column; gap: 8px; position: relative; padding-right: 140px; /* responsive min-height: scales with viewport width but clamped */
+    min-height: clamp(140px, 16vw, 220px);
+    padding-bottom: 12px; flex: 1 1 0%; height: 100%; padding-left: 64px; min-width: 0; }
+/* place meta and actions using flex flow so actions sit at the bottom */
+.info-meta { left: 4px; /* bottom is responsive via CSS variables */ bottom: calc(var(--meta-bottom-gap) + var(--action-height) -14px); text-align: left; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.info-actions { position: absolute; right: 12px; bottom: 2px; display: flex; gap: 8px; align-items: center; justify-content: flex-end; z-index: 2; }
+
+.info-title { font-size: 16px; font-weight: 700; color: #111; text-align: left; margin-left: 0; padding-left: 0; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; word-break: break-word; }
+.info-author {
+    font-size: 11px;
+    color: #555;
+    /* Limit author to max 2 lines with ellipsis */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    /* reserve space for 2 lines to avoid layout shift */
+    max-height: calc(2 * 1.2em);
+}
+.info-publisher-date { font-size: 12px; color: #999; }
+
+/* make buttons emoji-only, circular and compact */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0; width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 1px solid #ddd; background: #fff; cursor: pointer; font-weight: 700; font-size: 15px; }
+.btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(0,123,255,0.12); }
+.btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
+.btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
+.btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
+
+/* wishlist button styling */
+.btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
+.btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
+
+/* Sticky search bar (appears below sticky header) */
+.search-bar {
+    position: sticky;
+    top: 56px; /* sit just beneath the sticky header (adjust if header height changes) */
+    z-index: 1050; /* below header (1100) but above page content */
+    background: #ffffff; /* match page background so it looks integrated */
+    padding: 10px 0; /* vertical breathing room */
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    box-shadow: 0 6px 18px rgba(2,6,23,0.04);
+}
+
+.search-bar .input-row { background: transparent; padding: 0; }
+
+/* Responsive variables for meta/action spacing (adjusted per-breakpoint below) */
+:root {
+    --meta-bottom-gap: 12px; /* distance between bottom of details and top of actions */
+    --action-height: 50px;   /* height of action area (buttons) */
+}
+
+.container {
+    background: #fff;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.08);
+    width: 100%;
+    margin: 0 auto;
+}
+
+/* Sticky header styles */
+.site-header {
+    position: sticky;
+    top: 0;
+    z-index: 1100; /* above page content but below modals (modals use 1200) */
+    background: #ffffff; /* match container background */
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center; /* logo centered by default */
+    border-bottom: 1px solid rgba(0,0,0,0.04);
+    box-shadow: 0 2px 8px rgba(2,6,23,0.04);
+}
+
+/* ensure content isn't hidden under sticky header — give global top padding equal to header height on .container parent */
+.container {
+    padding-top: calc(20px + 56px); /* original 20px + estimated header height (56px) */
+}
+
+.logo {
+    font-size: 30px;
+    font-weight: 800;
+    color: #007bff;
+    text-align: center;
+    margin-bottom: 30px;
+    margin-top: 30px;
+}
+
+/* user-badge positioned on the right within the header */
+.user-badge {
+    position: absolute;
+    right: 18px;
+    top: 12px;
+    font-size: 13px;
+    line-height: 1;
+}
+
+/* 검색바 영역 */
+.input-row {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+select {
+    flex: 3;
+    min-width: 0; /* 폴드 삐져나옴 방지 */
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+}
+
+input[type="text"] {
+    flex: 7;
+    min-width: 0; /* 폴드 삐져나옴 방지 */
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+/* 책 옵션 영역 (초기 숨김) */
+.book-extra {
+    display: none;
+    background: #f8f9ff;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    border: 1px solid #e0e7ff;
+}
+
+.option-section { margin-bottom: 10px; }
+.option-title { font-size: 13px; font-weight: 700; margin-bottom: 5px; }
+.radio-group { display: flex; gap: 15px; }
+
+/* 결과 영역 (쿠팡 스타일) */
+.result-table { width: 100%; border-collapse: collapse; display: block; }
+#resultArea { margin-top: 20px; border-top: 1px solid #eee; overflow-x: auto; }
+.result-table tr { border-bottom: 1px solid #f0f0f0; display: flex; align-items: stretch; flex-wrap: nowrap; gap: 12px; width: 100%; box-sizing: border-box; min-width: 0; }
+.result-table td { padding: 16px 0; vertical-align: top; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+
+.info-cover { flex: 0 0 100px; padding-right: 0; display: flex; align-items: stretch; }
+.info-cover img { height: 150px; width: auto; display: block; border-radius: 4px; object-fit: cover; }
+
+.info-details { display: flex; flex-direction: column; gap: 8px; position: relative; padding-right: 140px; /* responsive min-height: scales with viewport width but clamped */
+    min-height: clamp(140px, 16vw, 220px);
+    padding-bottom: 12px; flex: 1 1 0%; height: 100%; padding-left: 64px; min-width: 0; }
+/* place meta and actions using flex flow so actions sit at the bottom */
+.info-meta { left: 4px; /* bottom is responsive via CSS variables */ bottom: calc(var(--meta-bottom-gap) + var(--action-height) -14px); text-align: left; display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.info-actions { position: absolute; right: 12px; bottom: 2px; display: flex; gap: 8px; align-items: center; justify-content: flex-end; z-index: 2; }
+
+.info-title { font-size: 16px; font-weight: 700; color: #111; text-align: left; margin-left: 0; padding-left: 0; min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; word-break: break-word; }
+.info-author {
+    font-size: 11px;
+    color: #555;
+    /* Limit author to max 2 lines with ellipsis */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.2;
+    /* reserve space for 2 lines to avoid layout shift */
+    max-height: calc(2 * 1.2em);
+}
+.info-publisher-date { font-size: 12px; color: #999; }
+
+/* make buttons emoji-only, circular and compact */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 0; width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 1px solid #ddd; background: #fff; cursor: pointer; font-weight: 700; font-size: 15px; }
+.btn:focus { outline: none; box-shadow: 0 0 0 3px rgba(0,123,255,0.12); }
+.btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
+.btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
+.btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
+
+/* wishlist button styling */
+.btn-wish { color: #ff69b4; border-color: rgba(255,105,180,0.12); }
+.btn-wish.active { background: rgba(255,105,180,0.06); border-color: rgba(255,105,180,0.18); }
 
 /* Sticky search bar (appears below sticky header) */
 .search-bar {
@@ -1395,7 +1577,7 @@ input[type="text"] {
 .result-table td { padding: 16px 0; vertical-align: top; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
 
 .info-cover { flex: 0 0 100px; padding-right: 0; display: flex; align-items: stretch; }
-.info-cover img { height: 140px; width: auto; display: block; border-radius: 4px; object-fit: cover; }
+.info-cover img { height: 150px; width: auto; display: block; border-radius: 4px; object-fit: cover; }
 
 .info-details { display: flex; flex-direction: column; gap: 8px; position: relative; padding-right: 140px; /* responsive min-height: scales with viewport width but clamped */
     min-height: clamp(140px, 16vw, 220px);
@@ -1426,6 +1608,7 @@ input[type="text"] {
 .btn-rvw { color: #ff4d6d; border-color: rgba(255,77,109,0.15); }
 .btn-read { color: #28a745; border-color: rgba(40,167,69,0.12); }
 .btn.active { background: rgba(0,123,255,0.06); border-color: rgba(0,123,255,0.18); }
+/* Make review button visibly blue when active to indicate user's review exists */
 
 /* Center the empty-profile state: center login prompt inside profile-main when no user */
 .profile-main.profile-empty {

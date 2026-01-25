@@ -6,6 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MediaNote - 검색</title>
     <link rel="stylesheet" href="${pageContext.request.contextPath}/css/style.css">
+    <style>
+        /* Ensure summary rating is always visible even when user is not logged in */
+        .summary-badge { display: inline-block !important; color: #555 !important; }
+        .summary-badge .big, .summary-rating-val { display: inline-block !important; font-weight: 700 !important; color: #222 !important; visibility: visible !important; }
+    </style>
 </head>
 <body>
 
@@ -26,6 +31,11 @@
 
 <div class="container" style="position:relative;">
     <div id="resultArea"></div>
+    <!-- DEBUG PANEL: temporary - shows last /review/status response for troubleshooting -->
+    <div id="mn-debug" style="position:fixed; right:8px; bottom:8px; max-width:420px; max-height:320px; overflow:auto; background:#fff; border:1px solid #ddd; padding:8px; font-size:12px; color:#222; display:none; z-index:9999; box-shadow:0 2px 8px rgba(0,0,0,0.1);">
+        <strong style="display:block; margin-bottom:6px;">DEBUG: /review/status</strong>
+        <pre id="mn-debug-pre" style="white-space:pre-wrap; word-break:break-word; margin:0;">(response will appear here)</pre>
+    </div>
 </div>
 
 <!-- Review modal (modern design) -->
@@ -245,17 +255,52 @@ $(document).ready(function() {
             $detailsTd.append($metaDiv);
 
             const $actionsDiv = $("<div class='info-actions'></div>");
-            const $likeBtn = $("<button class='btn btn-rvw' type='button' aria-pressed='false' title='감상평' aria-label='감상평'>💬</button>");
-            const $readBtn = $("<button class='btn btn-read' type='button' aria-pressed='false' title='읽음' aria-label='읽음'>📖</button>");
-            if (liked) { $likeBtn.addClass('active').attr('aria-pressed','true'); }
-            if (read) { $readBtn.addClass('active').attr('aria-pressed','true'); }
-
-            $actionsDiv.append("<span class='summary-badge' title='평균 평점' style='margin-right:8px;'><span>평점 : </span> <span class='big summary-rating-val'>-</span></span>");
-            $actionsDiv.append($likeBtn);
-            $actionsDiv.append($readBtn);
+            // single actions block for books: rating summary + review/read/wish buttons with counts
+            var $rvwBtn = $("<button class='btn btn-rvw' type='button' aria-pressed='false' title='감상평' aria-label='감상평'>💬</button>");
+            var $rvwCount = $("<span class='btn-count btn-rvw-count' style='margin-left:6px; font-size:12px; color:#666;'>-</span>");
+            var $summaryRvwCnt = $("<span class='summary-rvw-cnt' style='display:none;'></span>");
+            var $summaryReadCnt = $("<span class='summary-read-cnt' style='display:none;'></span>");
+            var $summaryWishCnt = $("<span class='summary-wish-cnt' style='display:none;'></span>");
+            var $readBtn = $("<button class='btn btn-read' type='button' aria-pressed='false' title='읽음' aria-label='읽음'>📖</button>");
+            var $readCount = $("<span class='btn-count btn-read-count' style='margin-left:6px; font-size:12px; color:#666;'>-</span>");
             var $wishBtn = $("<button class='btn btn-wish' type='button' aria-pressed='false' title='위시리스트' aria-label='위시리스트'>💖</button>");
-            try { if (localStorage.getItem(makeStorageKey('mn_wish', rawKey)) === '1') { $wishBtn.addClass('active').attr('aria-pressed','true'); } } catch(e){}
-            $actionsDiv.append($wishBtn);
+            var $wishCount = $("<span class='btn-count btn-wish-count' style='margin-left:6px; font-size:12px; color:#666;'>0</span>");
+            // If server-side item already contains wish info, apply it immediately so UI reflects it without waiting for the batch call
+            try {
+                var _wishCnt = null;
+                if (typeof item.wishCount !== 'undefined' && item.wishCount != null) _wishCnt = item.wishCount;
+                else if (typeof item.WISH_CNT !== 'undefined' && item.WISH_CNT != null) _wishCnt = item.WISH_CNT;
+                else if (typeof item.wish !== 'undefined' && item.wish != null) _wishCnt = item.wish;
+
+                if (_wishCnt != null) {
+                    try { $wishCount.text(_wishCnt); } catch(e){}
+                    try { $summaryWishCnt.text(_wishCnt); } catch(e){}
+                }
+
+                var _userHasWish = false;
+                if (typeof item.userHasWish !== 'undefined') _userHasWish = !!item.userHasWish;
+                else if (typeof item.userHas !== 'undefined') _userHasWish = !!item.userHas;
+                else if (typeof item.wished !== 'undefined') _userHasWish = !!item.wished;
+                else if (typeof item.wishYn !== 'undefined') _userHasWish = (String(item.wishYn).toUpperCase() === 'Y' || String(item.wishYn) === '1');
+
+                if (_userHasWish) {
+                    $wishBtn.addClass('active').attr('aria-pressed','true');
+                }
+            } catch(e) { /* non-fatal */ }
+
+            // append hidden summary placeholders for batch update handlers
+            $actionsDiv.append($rvwBtn).append($rvwCount).append($summaryRvwCnt).append($readBtn).append($readCount).append($summaryReadCnt).append($summaryWishCnt).append($wishBtn).append($wishCount);
+            // 서버(/hello)에서 제공한 사용자 상태로 초기 active 설정 (로그인 시)
+            try {
+                if (typeof item.userHasReview !== 'undefined' && item.userHasReview) {
+                    $rvwBtn.addClass('active').attr('aria-pressed','true');
+                }
+                if (typeof item.userRead !== 'undefined' && item.userRead) {
+                    $readBtn.addClass('active').attr('aria-pressed','true');
+                }
+            } catch(e) {}
+            // NOTE: 리뷰 버튼 초기 활성화는 DB 상태 우선. 읽음/위시는 로컬스토리지와 서버 동기화 로직이 뒤에서 보정함
+            if (read) { $readBtn.addClass('active').attr('aria-pressed','true'); }
 
             $detailsTd.append($actionsDiv);
             $detailsTd.append('<input type="hidden" class="item-isbn" value="' + (item.isbn || '') + '">');
@@ -275,17 +320,88 @@ $(document).ready(function() {
 
         $('#resultArea').html($table);
 
+        // Batch wishlist sync for books: set btn-wish active and counts immediately from DB
+        try {
+            var isbnsBatch = []; var isbns13Batch = [];
+            $table.find('tr').each(function(){
+                var $r = $(this);
+                var bi = $r.attr('data-isbn') || '';
+                var bi13 = $r.attr('data-isbn13') || '';
+                if (bi && String(bi).trim().length>0) isbnsBatch.push(String(bi).trim());
+                if (bi13 && String(bi13).trim().length>0) isbns13Batch.push(String(bi13).trim());
+            });
+            if (isbnsBatch.length>0 || isbns13Batch.length>0) {
+                $.ajax({
+                    url: contextPath + '/wish/count',
+                    type: 'POST',
+                    contentType: 'application/json; charset=UTF-8',
+                    data: JSON.stringify({ isbns: isbnsBatch, isbns13: isbns13Batch }),
+                    success: function(wresp){
+                        try {
+                            try { console.debug('book wish batch response', wresp); } catch(e){}
+                            if (!wresp || wresp.status !== 'OK' || !wresp.data) return;
+                            var applyRow = function(key, v) {
+                                try {
+                                    var $row = null;
+                                    if (key && String(key).trim().length === 13) $row = $("tr[data-isbn13='" + String(key).trim() + "']");
+                                    if ((!$row || $row.length===0) && key) $row = $("tr[data-isbn='" + String(key).trim() + "']");
+                                    if (!$row || $row.length===0) return;
+                                    // count candidates
+                                    var cnt = null;
+                                    if (v && typeof v.count !== 'undefined') cnt = v.count;
+                                    else if (v && typeof v.cnt !== 'undefined') cnt = v.cnt;
+                                    else if (v && typeof v.wishCount !== 'undefined') cnt = v.wishCount;
+                                    else if (typeof v === 'number') cnt = v;
+                                    // user flag candidates
+                                    var userHas = false;
+                                    if (v && typeof v.userHasWish !== 'undefined') userHas = !!v.userHasWish;
+                                    else if (v && typeof v.userHas !== 'undefined') userHas = !!v.userHas;
+                                    else if (v && typeof v.wished !== 'undefined') userHas = !!v.wished;
+                                    else if (v && typeof v.wishYn !== 'undefined') userHas = (String(v.wishYn).toUpperCase() === 'Y' || String(v.wishYn) === '1');
+                                    var $btn = $row.find('.btn-wish').first();
+                                    if ($btn && $btn.length) {
+                                        if (userHas) $btn.addClass('active').attr('aria-pressed','true'); else $btn.removeClass('active').attr('aria-pressed','false');
+                                    }
+                                    if (cnt != null) { try { $row.find('.btn-wish-count').first().text(cnt); } catch(e){} }
+                                } catch(e) { console.warn('applyRow(wish) error', e); }
+                            };
+                            var d = wresp.data;
+                            if (Array.isArray(d)) {
+                                d.forEach(function(it){
+                                    try {
+                                        var key = null;
+                                        if (it) {
+                                            key = it.isbn13 || it.ISBN13 || it.isbn || it.ISBN || null;
+                                        }
+                                        applyRow(key, it);
+                                    } catch(e) { console.warn('book wish array item parse error', e); }
+                                });
+                            } else {
+                                Object.keys(d).forEach(function(k){ applyRow(k, d[k]); });
+                            }
+                        } catch(e) { console.error('book wish count handler error', e); }
+                    },
+                    error: function(){ /* ignore */ }
+                });
+            }
+        } catch(e) { /* ignore batch wish sync errors */ }
+
         // per-row review/summary population
         $table.find('tr').each(function(idx){
             try {
                 var $row = $(this);
                 var rIsbn = $row.attr('data-isbn') || '';
                 var rIsbn13 = $row.attr('data-isbn13') || '';
+                // Support movie rows: check data-movie-id attribute or hidden input
+                var rMvId = $row.attr('data-movie-id') || ($row.find('.item-movie-id').length ? $row.find('.item-movie-id').val() : '') || '';
                 var $ratingEl = $row.find('.summary-rating-val');
                 var $rvwCntEl = $row.find('.summary-rvw-cnt');
                 var $readCntEl = $row.find('.summary-read-cnt');
-                if ((rIsbn && rIsbn.toString().trim().length>0) || (rIsbn13 && rIsbn13.toString().trim().length>0)) {
-                    var payload = { isbn: (rIsbn && rIsbn.toString().trim())? rIsbn.toString().trim(): '', isbn13: (rIsbn13 && rIsbn13.toString().trim().length>0)? rIsbn13.toString().trim(): '' };
+                console.log('Processing row', idx, 'ISBN:', rIsbn, 'ISBN13:', rIsbn13, 'MV_ID:', rMvId);
+                // Only request summary when we have an identifier (ISBN/ISBN13 for books or mvId for movies)
+                if ((rIsbn && rIsbn.toString().trim().length>0) || (rIsbn13 && rIsbn13.toString().trim().length>0) || (rMvId && String(rMvId).trim().length>0)) {
+                    var isMovieRow = (rMvId && String(rMvId).trim().length>0);
+                    var payload = isMovieRow ? { mvId: (rMvId && String(rMvId).trim() ? Number(String(rMvId).trim()) : null) } : { isbn: (rIsbn && rIsbn.toString().trim())? rIsbn.toString().trim(): '', isbn13: (rIsbn13 && rIsbn13.toString().trim().length>0)? rIsbn13.toString().trim(): '' };
                     $.ajax({
                         url: contextPath + '/review/summary',
                         type: 'POST',
@@ -296,12 +412,25 @@ $(document).ready(function() {
                                 if (resp && resp.status === 'OK' && resp.data) {
                                     var s = resp.data;
                                     var avg = (s.avgRating != null && s.avgRating !== '') ? Number(s.avgRating).toFixed(1) : '-';
-                                    var rc = (s.likeCount != null) ? s.likeCount : 0;
-                                    var read = (s.readCount != null) ? s.readCount : 0;
-                                    if ($ratingEl && $ratingEl.length) $ratingEl.text(avg);
-                                    if ($rvwCntEl && $rvwCntEl.length) $rvwCntEl.text(rc);
+                                    // prefer explicit reviewCount (reviews with CMNT or REVIEW_TEXT), fall back to likeCount
+                                    var rc = null;
+                                    if (typeof s.reviewCount !== 'undefined' && s.reviewCount != null) rc = s.reviewCount;
+                                    else if (typeof s.REVIEW_WITH_TEXT_CNT !== 'undefined' && s.REVIEW_WITH_TEXT_CNT != null) rc = s.REVIEW_WITH_TEXT_CNT;
+                                    else if (typeof s.review_with_text_cnt !== 'undefined' && s.review_with_text_cnt != null) rc = s.review_with_text_cnt;
+                                    else if (s.likeCount != null) rc = s.likeCount;
+                                    else rc = 0;
+                                     var read = (s.readCount != null) ? s.readCount : 0;
+                                     if ($ratingEl && $ratingEl.length) $ratingEl.text(avg);
+                                     if ($rvwCntEl && $rvwCntEl.length) $rvwCntEl.text(rc);
+                                     try {
+                                         var $rvwBadge = $row.find('.btn-rvw-count').first();
+                                         if ($rvwBadge && $rvwBadge.length) {
+                                             $rvwBadge.text(rc);
+                                             try { if (Number(rc) > 0) $rvwBadge.addClass('has-review'); else $rvwBadge.removeClass('has-review'); } catch(e){}
+                                         }
+                                     } catch(e){}
                                     if ($readCntEl && $readCntEl.length) $readCntEl.text(read);
-
+                                    try { $row.find('.btn-read-count').first().text(read); } catch(e){}
                                     // Also synchronize per-row wish state from server so UI reflects DB (not only localStorage)
                                     try {
                                         var $wishBtnRow = $row.find('.btn-wish').first();
@@ -310,42 +439,307 @@ $(document).ready(function() {
                                         var titleRow = $row.find('.info-title').text() || '';
                                         var authorRow = $row.find('.info-author').text() || '';
                                         var rawKeyRow = (domIsbnRow && domIsbnRow.length) ? domIsbnRow : (titleRow + '|' + authorRow);
-                                        // ask server whether current user has wished this item
-                                        $.ajax({
-                                            url: contextPath + '/wish/count',
-                                            type: 'POST',
-                                            contentType: 'application/json; charset=UTF-8',
-                                            data: JSON.stringify(payload),
-                                            success: function(wresp) {
-                                                try {
-                                                    if (wresp && wresp.status === 'OK') {
-                                                        var userHas = false;
-                                                        if (typeof wresp.userHasWish !== 'undefined') userHas = !!wresp.userHasWish;
-                                                        else if (wresp.data && typeof wresp.data.count !== 'undefined') userHas = Number(wresp.data.count) > 0;
+                                        // For book rows only, ask server whether current user has wished this item (per-row).
+                                        // Movie rows are updated via the batch call below.
+                                        if (!isMovieRow) {
+                                            var wishPayload = payload;
+                                            $.ajax({
+                                                url: contextPath + '/wish/count',
+                                                type: 'POST',
+                                                contentType: 'application/json; charset=UTF-8',
+                                                data: JSON.stringify(wishPayload),
+                                                success: function(wresp) {
+                                                     try {
+                                                         try { console.debug('per-row wish response', wresp); } catch(e){}
+                                                         if (!wresp) return;
+                                                         // Normalize possible response shapes
+                                                         var entry = null;
+                                                         if (wresp.data) {
+                                                             // If data is map with key matching our identifier, pick first value
+                                                             if (typeof wresp.data === 'object' && !Array.isArray(wresp.data)) {
+                                                                 var keys = Object.keys(wresp.data);
+                                                                 if (keys && keys.length>0) entry = wresp.data[keys[0]] || wresp.data;
+                                                                 else entry = wresp.data;
+                                                             } else {
+                                                                 entry = wresp.data;
+                                                             }
+                                                         } else {
+                                                             entry = wresp;
+                                                         }
 
-                                                        if ($wishBtnRow && $wishBtnRow.length) {
-                                                            if (userHas) {
-                                                                $wishBtnRow.addClass('active').attr('aria-pressed','true');
-                                                                try { localStorage.setItem(makeStorageKey('mn_wish', rawKeyRow), '1'); } catch(e) {}
-                                                            } else {
-                                                                $wishBtnRow.removeClass('active').attr('aria-pressed','false');
-                                                                try { localStorage.removeItem(makeStorageKey('mn_wish', rawKeyRow)); } catch(e) {}
-                                                            }
-                                                        }
-                                                    }
-                                                } catch (e) { console.error('wish count handler error', e); }
-                                            },
-                                            error: function() { /* ignore wish sync failures */ }
-                                        });
+                                                         var cnt = null;
+                                                         if (entry && typeof entry.count !== 'undefined') cnt = entry.count;
+                                                         else if (entry && typeof entry.cnt !== 'undefined') cnt = entry.cnt;
+                                                         else if (entry && typeof entry.wishCount !== 'undefined') cnt = entry.wishCount;
+                                                         else if (typeof wresp.count !== 'undefined') cnt = wresp.count;
+
+                                                         var userHas = false;
+                                                         if (entry && typeof entry.userHasWish !== 'undefined') userHas = !!entry.userHasWish;
+                                                         else if (entry && typeof entry.userHas !== 'undefined') userHas = !!entry.userHas;
+                                                         else if (entry && typeof entry.wished !== 'undefined') userHas = !!entry.wished;
+                                                         else if (entry && typeof entry.wishYn !== 'undefined') userHas = (String(entry.wishYn).toUpperCase() === 'Y' || String(entry.wishYn) === '1');
+
+                                                         if ($wishBtnRow && $wishBtnRow.length) {
+                                                             if (userHas) {
+                                                                 $wishBtnRow.addClass('active').attr('aria-pressed','true');
+                                                                 try { localStorage.setItem(makeStorageKey('mn_wish', rawKeyRow), '1'); } catch(e) {}
+                                                             } else {
+                                                                 $wishBtnRow.removeClass('active').attr('aria-pressed','false');
+                                                                 try { localStorage.removeItem(makeStorageKey('mn_wish', rawKeyRow)); } catch(e) {}
+                                                             }
+                                                         }
+                                                         if (cnt != null) $row.find('.btn-wish-count').first().text(cnt);
+                                                     } catch (e) { console.error('wish count handler error', e); }
+                                                },
+                                                error: function() { /* ignore wish sync failures */ }
+                                            });
+                                        }
                                     } catch (e) { console.warn('wish sync error', e); }
+                                 }
+                             } catch (e) { console.error('summary populate error', e); }
+                         },
+                         error: function(xhr) { /* ignore per-row summary failures */ }
+                     });
+                 }
+             } catch(e) { console.error('per-row summary loop error', e); }
+         });
+
+        // Batch fetch movie-level review/read aggregates so averages show for everyone (unauthenticated too)
+        try {
+            var mvIds = [];
+            $table.find('tr[data-movie-id]').each(function(){
+                try {
+                    var id = $(this).attr('data-movie-id') || $(this).find('.item-movie-id').val() || '';
+                    if (id && String(id).trim().length > 0) mvIds.push(id);
+                } catch(e) {}
+            });
+            if (mvIds.length > 0) {
+                $.ajax({
+                    url: contextPath + '/review/status',
+                    type: 'POST',
+                    contentType: 'application/json; charset=UTF-8',
+                    data: JSON.stringify({ mvIds: mvIds }),
+                    success: function(resp) {
+                        try {
+                            console.debug('movie status batch response', resp && resp.status, resp && resp.data ? (Array.isArray(resp.data) ? resp.data.length : Object.keys(resp.data).length) : 0);
+
+                            // show full response in debug panel for easier troubleshooting
+                            try {
+                                var dbg = $('#mn-debug-pre');
+                                if (dbg && dbg.length) {
+                                    try { dbg.text(JSON.stringify(resp, null, 2)); } catch(e) { dbg.text(String(resp)); }
+                                    $('#mn-debug').show();
                                 }
-                            } catch (e) { console.error('summary populate error', e); }
+                            } catch(e) { /* non-fatal */ }
+
+                            if (!resp || resp.status !== 'OK' || !resp.data) return;
+
+                            // Support two shapes: resp.data as a map keyed by mvId, or an array of rows with MV_ID inside
+                            if (Array.isArray(resp.data)) {
+                                resp.data.forEach(function(st) {
+                                    try { handleMovieStatusRow(st); } catch(e){ console.warn('movie status row handler failed for array item', e); }
+                                });
+                            } else {
+                                Object.keys(resp.data).forEach(function(k){
+                                    try {
+                                        var st = resp.data[k];
+                                        // If the entry lacks MV_ID, set it from the key to make downstream logic consistent
+                                        try { if (st && (typeof st.MV_ID === 'undefined' || st.MV_ID === null)) st.MV_ID = k; } catch(e){}
+                                        handleMovieStatusRow(st);
+                                    } catch(e) { console.warn('movie status row handler failed for key', k, e); }
+                                });
+                            }
+
+                            function coerceNumber(v) {
+                                try { if (v == null) return null; var n = Number(v); return isNaN(n) ? null : n; } catch(e){ return null; }
+                            }
+
+                            function handleMovieStatusRow(st) {
+                                if (!st) return;
+                                var mvId = (typeof st.MV_ID !== 'undefined' && st.MV_ID != null) ? String(st.MV_ID) : (typeof st.mvId !== 'undefined' && st.mvId != null ? String(st.mvId) : null);
+                                if (!mvId) {
+                                    // try other possible keys
+                                    if (st.mv_id) mvId = String(st.mv_id);
+                                }
+                                if (!mvId) return;
+
+                                var $row = $("tr[data-movie-id='" + mvId + "']");
+                                if (!$row || $row.length === 0) return;
+
+                                // average rating: support many field names
+                                var avgVal = null;
+                                if (typeof st.avgRating !== 'undefined') avgVal = st.avgRating;
+                                else if (typeof st.AVG_RATING !== 'undefined') avgVal = st.AVG_RATING;
+                                else if (typeof st.avg !== 'undefined') avgVal = st.avg;
+                                else if (typeof st.ratingAvg !== 'undefined') avgVal = st.ratingAvg;
+                                else if (typeof st.average !== 'undefined') avgVal = st.average;
+                                if (avgVal != null && String(avgVal).trim().length > 0 && !isNaN(Number(avgVal))) {
+                                    $row.find('.summary-rating-val').first().text(Number(avgVal).toFixed(1));
+                                }
+
+                                // rating count (number of users who rated)
+                                var ratingCount = coerceNumber(st.ratingCount != null ? st.ratingCount : (st.RATING_CNT != null ? st.RATING_CNT : (st.rating_cnt != null ? st.rating_cnt : (st.likeCount != null ? st.likeCount : null))));
+                                if (ratingCount != null) {
+                                    $row.find('.summary-rvw-cnt').first().text(ratingCount);
+                                    $row.find('.btn-rvw-count').first().text(ratingCount);
+                                }
+
+                                // read count
+                                var readCount = coerceNumber(st.readCount != null ? st.readCount : (st.READ_CNT != null ? st.READ_CNT : (st.read_cnt != null ? st.read_cnt : null)));
+                                if (readCount != null) {
+                                    $row.find('.summary-read-cnt').first().text(readCount);
+                                    $row.find('.btn-read-count').first().text(readCount);
+                                }
+                                
+                                // read count
+                                var wishCount = coerceNumber(st.wishCount != null ? st.wishCount : (st.WISH_CNT != null ? st.WISH_CNT : (st.wish_cnt != null ? st.wish_cnt : null)));
+                                if (wishCount != null) {
+                                    $row.find('.summary-wish-cnt').first().text(wishCount);
+                                    $row.find('.btn-wish-count').first().text(wishCount);
+                                }
+
+                                // wish count / user wish flag (support multiple possible field names)
+                                try {
+                                    var wishCnt = coerceNumber(st.wishCount != null ? st.wishCount : (st.WISH_CNT != null ? st.WISH_CNT : (st.wish_cnt != null ? st.wish_cnt : null)));
+                                    if (wishCnt == null && st.count != null && st.type === 'wish') wishCnt = coerceNumber(st.count);
+                                    if (wishCnt != null) {
+                                        try { $row.find('.btn-wish-count').first().text(wishCnt); } catch(e){}
+                                        try { $row.find('.summary-wish-cnt').first().text(wishCnt); } catch(e){}
+                                    }
+
+                                    var userHasWish = false;
+                                    if (typeof st.userHasWish !== 'undefined') userHasWish = !!st.userHasWish;
+                                    else if (typeof st.userHas !== 'undefined') userHasWish = !!st.userHas;
+                                    else if (typeof st.wished !== 'undefined') userHasWish = !!st.wished;
+                                    else if (typeof st.wishYn !== 'undefined') userHasWish = (String(st.wishYn).toUpperCase() === 'Y' || String(st.wishYn) === '1');
+                                    if (userHasWish) $row.find('.btn-wish').first().addClass('active').attr('aria-pressed','true'); else $row.find('.btn-wish').first().removeClass('active').attr('aria-pressed','false');
+                                } catch(e) { /* non-fatal: wish updates optional */ }
+
+                                // (do not set global active state here - per-user flags handled below)
+                                // Also expose cmnt / review-text counts to DOM if needed (hidden)
+                                try { if (cmntCnt != null) $row.find('.summary-rvw-cnt').first().attr('data-cmnt-cnt', cmntCnt); } catch(e) {}
+                                try { if (reviewTextCnt != null) $row.find('.summary-rvw-cnt').first().attr('data-reviewtext-cnt', reviewTextCnt); } catch(e) {}
+
+                                // Personal flags: set active state if server returned user-specific flags
+                                try {
+                                    var hasReview = false;
+                                    if (typeof st.hasUserReview !== 'undefined') hasReview = !!st.hasUserReview;
+                                    else if (typeof st.userHasReview !== 'undefined') hasReview = !!st.userHasReview;
+                                    else {
+                                        // Check multiple possible fields: rating, cmnt/comment, reviewText/text
+                                        try {
+                                            if (typeof st.rating !== 'undefined' && st.rating != null && String(st.rating).trim().length>0) hasReview = true;
+                                        } catch(e){}
+                                        try {
+                                            if (!hasReview) {
+                                                var _cm = (typeof st.cmnt !== 'undefined' ? st.cmnt : (typeof st.CMNT !== 'undefined' ? st.CMNT : (typeof st.comment !== 'undefined' ? st.comment : null)));
+                                                if (_cm != null && String(_cm).trim().length > 0) hasReview = true;
+                                            }
+                                        } catch(e){}
+                                        try {
+                                            if (!hasReview) {
+                                                var _rt = (typeof st.reviewText !== 'undefined' ? st.reviewText : (typeof st.REVIEW_TEXT !== 'undefined' ? st.REVIEW_TEXT : (typeof st.text !== 'undefined' ? st.text : null)));
+                                                if (_rt != null && String(_rt).trim().length > 0) hasReview = true;
+                                            }
+                                        } catch(e){}
+                                    }
+                                    if (hasReview) $row.find('.btn-rvw').first().addClass('active').attr('aria-pressed','true');
+                                    else $row.find('.btn-rvw').first().removeClass('active').attr('aria-pressed','false');
+
+                                    // 읽음 여부도 DB 상태로 반영 (st를 사용)
+                                    try {
+                                        var hasRead = false;
+                                        if (typeof st.userRead !== 'undefined') {
+                                            hasRead = !!st.userRead;
+                                        } else {
+                                            var ryn = (st.readYn !== undefined ? st.readYn : (st.READ_YN !== undefined ? st.READ_YN : null));
+                                            if (ryn != null) {
+                                                var s = String(ryn).trim();
+                                                if (s === 'Y' || s === '1' || s.toLowerCase() === 'true') hasRead = true;
+                                            }
+                                        }
+                                        var $readBtnRow = $row.find('.btn-read').first();
+                                        if ($readBtnRow && $readBtnRow.length) {
+                                            if (hasRead) {
+                                                $readBtnRow.addClass('active').attr('aria-pressed','true');
+                                            } else {
+                                                $readBtnRow.removeClass('active').attr('aria-pressed','false');
+                                            }
+                                        }
+                                    } catch(e) { /* ignore read toggle errors */ }
+                                } catch(e) { console.warn('failed to apply personal flags for mvId=' + mvId, e); }
+                            }
+                        } catch(e) { console.error('movie status batch handler error', e); }
+                    },
+                    error: function() { /* ignore failures */ }
+                });
+
+                // Also fetch wishlist counts for the same movie ids in one call (server should accept mvIds array)
+                try {
+                    $.ajax({
+                        url: contextPath + '/wish/count',
+                        type: 'POST',
+                        contentType: 'application/json; charset=UTF-8',
+                        data: JSON.stringify({ mvIds: mvIds }),
+                        success: function(wresp) {
+                            try {
+                                try { console.debug('movie wish batch response', wresp); } catch(e){}
+                                if (!wresp || wresp.status !== 'OK' || !wresp.data) return;
+                                var d = wresp.data;
+                                var handleEntry = function(key, v) {
+                                    try {
+                                        var mid = null;
+                                        if (key && String(key).trim().length>0) mid = String(key);
+                                        if (v) {
+                                            if (!mid && (v.MV_ID || v.mvId || v.mv_id)) mid = String(v.MV_ID || v.mvId || v.mv_id);
+                                            if (!mid && (v.id || v.movieId)) mid = String(v.id || v.movieId);
+                                        }
+                                        if (!mid) return;
+                                        var cnt = null;
+                                        if (v && typeof v.count !== 'undefined') cnt = v.count;
+                                        else if (v && typeof v.cnt !== 'undefined') cnt = v.cnt;
+                                        else if (v && typeof v.wishCount !== 'undefined') cnt = v.wishCount;
+                                        else if (typeof v === 'number') cnt = v;
+                                        var userHas = false;
+                                        if (v && typeof v.userHasWish !== 'undefined') userHas = !!v.userHasWish;
+                                        else if (v && typeof v.userHas !== 'undefined') userHas = !!v.userHas;
+                                        else if (v && typeof v.wished !== 'undefined') userHas = !!v.wished;
+                                        else if (v && typeof v.wishYn !== 'undefined') userHas = (String(v.wishYn).toUpperCase() === 'Y' || String(v.wishYn) === '1');
+
+                                        var $r = $("tr[data-movie-id='" + mid + "']");
+                                        if ($r && $r.length) {
+                                            try { 
+                                            	if (cnt != null) $r.find('.btn-wish-count').first().text(cnt); 
+                                            } catch(e){}
+                                            
+                                            try {
+                                                if (userHas) $r.find('.btn-wish').first().addClass('active').attr('aria-pressed','true');
+                                                else $r.find('.btn-wish').first().removeClass('active').attr('aria-pressed','false');
+                                            } catch(e){}
+                                        }
+                                    } catch(e) { console.warn('handleEntry(wish) error', e); }
+                                };
+                                if (Array.isArray(d)) {
+                                    d.forEach(function(item){
+                                        try {
+                                            var key = null;
+                                            if (item) {
+                                                if (item.MV_ID || item.mvId || item.mv_id) key = String(item.MV_ID || item.mvId || item.mv_id);
+                                                else if (item.id) key = String(item.id);
+                                            }
+                                            handleEntry(key, item);
+                                        } catch(e) { console.warn('movie wish array item parse error', e); }
+                                    });
+                                } else {
+                                    Object.keys(d).forEach(function(k){ handleEntry(k, d[k]); });
+                                }
+                            } catch(e) { console.error('wish count batch handler error', e); }
                         },
-                        error: function(xhr) { /* ignore per-row summary failures */ }
+                        error: function() { /* ignore wish-count failures */ }
                     });
-                }
-            } catch(e) { console.error('per-row summary loop error', e); }
-        });
+                } catch(e) { console.error('wish count batch error', e); }
+             }
+         } catch(e) { console.error('movie status batch error', e); }
     }
 
     // Render TMDB movie search results (simple card layout)
@@ -361,6 +755,8 @@ $(document).ready(function() {
                 try {
                     var $tr = $("<tr></tr>");
                     $tr.attr('data-movie-id', movie.id || '');
+                    // store genre ids on the row for later batch lookup (TMDB returns genre_ids array)
+                    try { if (movie.genre_ids && Array.isArray(movie.genre_ids) && movie.genre_ids.length>0) { $tr.attr('data-genre-ids', movie.genre_ids.join(',')); } } catch(e) {}
 
                     var $coverTd = $("<td class='info-cover'></td>");
                     var posterPath = movie.poster_path ? ('https://image.tmdb.org/t/p/w185' + movie.poster_path) : '';
@@ -375,17 +771,70 @@ $(document).ready(function() {
                     $detailsTd.append($titleLink);
 
                     var $meta = $("<div class='info-meta'></div>");
+
+                    $meta.append($("<div class='info-genres'></div>").text(''));
                     $meta.append($("<div class='info-author'></div>").text((movie.release_date ? movie.release_date : '') ));
+                    // placeholder for genres (will be populated in batch after rows are rendered)
                     $meta.append($("<div class='info-publisher-date'></div>").text(movie.original_language ? (movie.original_language.toUpperCase()) : ''));
                     $detailsTd.append($meta);
 
                     var $actions = $("<div class='info-actions'></div>");
                     // Add movie-specific actions: rating summary, review, watched, wishlist
                     $actions.append("<span class='summary-badge' title='평균 평점' style='margin-right:8px;'><span>평점 : </span> <span class='big summary-rating-val'>-</span></span>");
+                    // create hidden summary count elements so batch handlers can reliably update counts
+                    var $summaryRvwCntMovie = $("<span class='summary-rvw-cnt' style='display:none;'></span>");
+                    var $summaryReadCntMovie = $("<span class='summary-read-cnt' style='display:none;'></span>");
+                    var $summaryWishCntMovie = $("<span class='summary-wish-cnt' style='display:none;'></span>");
+                    // Do NOT prefill the rating value from TMDB vote_average here. Use server-side
+                    // /review/status batch response to populate .summary-rating-val so we don't rely on
+                    // external DB column (e.g. MS_MV_MST.VOTE_AVERAGE). We may optionally show TMDB
+                    // vote_count in the hidden summary element as a fallback for display, but rating
+                    // stays '-' until server aggregate arrives.
+                    try {
+                        var tmdbCount = (typeof movie.vote_count !== 'undefined' && movie.vote_count !== null) ? movie.vote_count : '-';
+                        // populate hidden review-count placeholder only; rating left as '-'
+                        setTimeout(function(){ try { if ($actions.find('.summary-rvw-cnt').length) $actions.find('.summary-rvw-cnt').first().text(tmdbCount); } catch(e){} }, 0);
+                    } catch(e) { console.debug('tmdb prefill error', e); }
                     var $rvwBtn = $("<button class='btn btn-rvw' type='button' aria-pressed='false' title='감상평' aria-label='감상평'>💬</button>");
+                    var $rvwCount = $("<span class='btn-count btn-rvw-count' style='margin-left:6px; font-size:12px; color:#666;'>-</span>");
                     var $watchBtn = $("<button class='btn btn-read' type='button' aria-pressed='false' title='영화 봄' aria-label='영화 봄'>🎬</button>");
+                    var $watchCount = $("<span class='btn-count btn-read-count' style='margin-left:6px; font-size:12px; color:#666;'>-</span>");
                     var $wishBtnMovie = $("<button class='btn btn-wish' type='button' aria-pressed='false' title='위시리스트' aria-label='위시리스트'>💖</button>");
-                    $actions.append($rvwBtn).append($watchBtn).append($wishBtnMovie);
+                    var $wishCount = $("<span class='btn-count btn-wish-count' style='margin-left:6px; font-size:12px; color:#666;'>0</span>");
+                    // If server-side movie object already contains wish info, apply it immediately so UI reflects it without waiting for the batch call
+                    try {
+                        var _movieWishCnt = null;
+                        if (typeof movie.wishCount !== 'undefined' && movie.wishCount != null) _movieWishCnt = movie.wishCount;
+                        else if (typeof movie.WISH_CNT !== 'undefined' && movie.WISH_CNT != null) _movieWishCnt = movie.WISH_CNT;
+                        else if (typeof movie.wish !== 'undefined' && movie.wish != null) _movieWishCnt = movie.wish;
+
+                        if (_movieWishCnt != null) {
+                            try { $wishCount.text(_movieWishCnt); } catch(e){}
+                            try { $summaryWishCntMovie.text(_movieWishCnt); } catch(e){}
+                        }
+
+                        var _userHasWish = false;
+                        if (typeof movie.userHasWish !== 'undefined') _userHasWish = !!movie.userHasWish;
+                        else if (typeof movie.userHas !== 'undefined') _userHasWish = !!movie.userHas;
+                        else if (typeof movie.wished !== 'undefined') _userHasWish = !!movie.wished;
+                        else if (typeof movie.wishYn !== 'undefined') _userHasWish = (String(movie.wishYn).toUpperCase() === 'Y' || String(movie.wishYn) === '1');
+
+                        if (_userHasWish) {
+                            $wishBtnMovie.addClass('active').attr('aria-pressed','true');
+                        }
+                    } catch(e) { /* non-fatal */ }
+
+                    // append hidden summary placeholders for batch update handlers
+                    $actions.append($rvwBtn).append($rvwCount).append($summaryRvwCntMovie).append($watchBtn).append($watchCount).append($summaryReadCntMovie).append($summaryWishCntMovie).append($wishBtnMovie).append($wishCount);
+                    // 서버(/movie/search)에서 제공한 사용자 상태로 초기 active 설정 (로그인 시)
+                    try {
+                        if (typeof movie.userHasReview !== 'undefined' && movie.userHasReview) {
+                            $rvwBtn.addClass('active').attr('aria-pressed','true');
+                        }
+                        if (typeof movie.userRead !== 'undefined' && movie.userRead) {
+                            $watchBtn.addClass('active').attr('aria-pressed','true');
+                        }
+                    } catch(e) {}
                     // hidden identifiers for movie rows
                     $detailsTd.append("<input type=\"hidden\" class=\"item-movie-id\" value=\"" + (movie.id || '') + "\">");
                     $detailsTd.append("<input type=\"hidden\" class=\"item-movie-title\" value=\"" + (movie.title || '') + "\">");
@@ -402,98 +851,216 @@ $(document).ready(function() {
 
             $('#resultArea').html($table);
 
-            // After inserting movie rows, ask server for review statuses for these movie IDs
+            // Immediately fetch movie-level wish counts so visible .btn-wish-count shows up without waiting for other batches
             try {
-                var mvIds = [];
-                $table.find('tr').each(function(){
-                    try {
-                        var id = $(this).attr('data-movie-id') || $(this).find('.item-movie-id').val() || '';
-                        if (id && String(id).trim().length > 0) mvIds.push(id);
-                    } catch(e) {}
-                });
-                if (mvIds.length > 0) {
+                var mvIdsForWish = [];
+                results.forEach(function(m){ try { if (m && m.id) mvIdsForWish.push(m.id); } catch(e){} });
+                if (mvIdsForWish.length > 0) {
+                    $.ajax({
+                        url: contextPath + '/wish/count',
+                        type: 'POST',
+                        contentType: 'application/json; charset=UTF-8',
+                        data: JSON.stringify({ mvIds: mvIdsForWish }),
+                        success: function(wresp) {
+                            try {
+                                if (!wresp || wresp.status !== 'OK' || !wresp.data) return;
+                                var d = wresp.data;
+                                var applyEntry = function(key, v) {
+                                    try {
+                                        var mid = null;
+                                        if (key && String(key).trim().length>0) mid = String(key);
+                                        if (!mid && v) {
+                                            mid = v.MV_ID || v.mvId || v.mv_id || v.id || v.movieId || null;
+                                            if (mid) mid = String(mid);
+                                        }
+                                        if (!mid) return;
+
+                                        var cnt = null;
+                                        if (v && typeof v.count !== 'undefined') cnt = v.count;
+                                        else if (v && typeof v.cnt !== 'undefined') cnt = v.cnt;
+                                        else if (v && typeof v.wishCount !== 'undefined') cnt = v.wishCount;
+                                        else if (typeof v === 'number') cnt = v;
+
+                                        var userHas = false;
+                                        if (v && typeof v.userHasWish !== 'undefined') userHas = !!v.userHasWish;
+                                        else if (v && typeof v.userHas !== 'undefined') userHas = !!v.userHas;
+                                        else if (v && typeof v.wished !== 'undefined') userHas = !!v.wished;
+                                        else if (v && typeof v.wishYn !== 'undefined') userHas = (String(v.wishYn).toUpperCase() === 'Y' || String(v.wishYn) === '1');
+
+                                        var $r = $("tr[data-movie-id='" + mid + "']");
+                                        if ($r && $r.length) {
+                                            try { if (cnt != null) $r.find('.btn-wish-count').first().text(cnt); } catch(e){}
+                                            try {
+                                                if (userHas) $r.find('.btn-wish').first().addClass('active').attr('aria-pressed','true');
+                                                else $r.find('.btn-wish').first().removeClass('active').attr('aria-pressed','false');
+                                            } catch(e){}
+                                        }
+                                    } catch(e) { console.warn('applyEntry(wish) error', e); }
+                                };
+
+                                if (Array.isArray(d)) {
+                                    d.forEach(function(it){ try { applyEntry(null, it); } catch(e){} });
+                                } else {
+                                    Object.keys(d).forEach(function(k){ try { applyEntry(k, d[k]); } catch(e){} });
+                                }
+                            } catch(e) { console.error('movie wish batch handler error', e); }
+                        },
+                        error: function() { /* ignore movie wish failures */ }
+                    });
+                }
+            } catch(e) { /* ignore */ }
+
+            // Immediately batch-fetch movie-level review/read aggregates for all rendered movies
+            try {
+                var renderedMvIds = [];
+                results.forEach(function(m){ try { if (m && m.id) renderedMvIds.push(m.id); } catch(e){} });
+                if (renderedMvIds.length > 0) {
                     $.ajax({
                         url: contextPath + '/review/status',
                         type: 'POST',
                         contentType: 'application/json; charset=UTF-8',
-                        data: JSON.stringify({ mvIds: mvIds }),
+                        data: JSON.stringify({ mvIds: renderedMvIds }),
                         success: function(resp) {
                             try {
-                                if (resp && resp.status === 'OK' && resp.data) {
-                                    // resp.data is a map keyed by mvId
-                                    Object.keys(resp.data).forEach(function(k) {
+                                if (!resp || resp.status !== 'OK' || !resp.data) return;
+                                // helper to coerce number
+                                function coerceNumber(v){ try{ if (v==null) return null; var n = Number(v); return isNaN(n) ? null : n; } catch(e){ return null; } }
+
+                                function applyStatus(st) {
+                                    try {
+                                        if (!st) return;
+                                        var mvId = (typeof st.MV_ID !== 'undefined' && st.MV_ID != null) ? String(st.MV_ID) : (typeof st.mvId !== 'undefined' && st.mvId != null ? String(st.mvId) : null);
+                                        if (!mvId && st.mv_id) mvId = String(st.mv_id);
+                                        if (!mvId) return;
+                                        var $row = $("tr[data-movie-id='" + mvId + "']");
+                                        if (!$row || $row.length === 0) return;
+
+                                        // avg rating
+                                        var avgVal = null;
+                                        if (typeof st.avgRating !== 'undefined') avgVal = st.avgRating;
+                                        else if (typeof st.AVG_RATING !== 'undefined') avgVal = st.AVG_RATING;
+                                        else if (typeof st.avg !== 'undefined') avgVal = st.avg;
+                                        if (avgVal != null && String(avgVal).trim().length > 0 && !isNaN(Number(avgVal))) {
+                                            $row.find('.summary-rating-val').first().text(Number(avgVal).toFixed(1));
+                                        }
+
+                                        var cmntCnt = coerceNumber(st.cmntCount != null ? st.cmntCount : (st.CMNT_CNT != null ? st.CMNT_CNT : (st.cmnt_cnt != null ? st.cmnt_cnt : null)));
+                                        var reviewTextCnt = coerceNumber(st.reviewTextCount != null ? st.reviewTextCount : (st.REVIEW_TEXT_CNT != null ? st.REVIEW_TEXT_CNT : (st.review_text_cnt != null ? st.review_text_cnt : null)));
+                                        var reviewWithTextCnt = coerceNumber(st.reviewCount != null ? st.reviewCount : (st.REVIEW_WITH_TEXT_CNT != null ? st.REVIEW_WITH_TEXT_CNT : (st.review_with_text_cnt != null ? st.review_with_text_cnt : null)));
+                                        var combinedReviewCnt = null;
+                                        if (reviewWithTextCnt != null) combinedReviewCnt = reviewWithTextCnt;
+                                        else if (cmntCnt != null || reviewTextCnt != null) combinedReviewCnt = (cmntCnt!=null?cmntCnt:0) + (reviewTextCnt!=null?reviewTextCnt:0);
+                                        else if (st.likeCount != null) combinedReviewCnt = coerceNumber(st.likeCount);
+                                        if (combinedReviewCnt == null) combinedReviewCnt = 0;
+
+                                        var readCnt = coerceNumber(st.readCount != null ? st.readCount : (st.READ_CNT != null ? st.READ_CNT : (st.read_cnt != null ? st.read_cnt : null)));
+                                        if (readCnt == null) readCnt = 0;
+
+                                        try { $row.find('.btn-rvw-count').first().text(combinedReviewCnt); } catch(e){}
+                                        try { $row.find('.summary-rvw-cnt').first().text(combinedReviewCnt); } catch(e){}
+                                        try { $row.find('.btn-read-count').first().text(readCnt); } catch(e){}
+                                        try { $row.find('.summary-read-cnt').first().text(readCnt); } catch(e){}
+                                        // wish count / user wish flag (support multiple possible field names)
                                         try {
-                                            var st = resp.data[k];
-                                            if (!st) return;
+                                            var wishCnt2 = coerceNumber(st.wishCount != null ? st.wishCount : (st.WISH_CNT != null ? st.WISH_CNT : (st.wish_cnt != null ? st.wish_cnt : null)));
+                                            if (wishCnt2 == null && st.wish != null) wishCnt2 = coerceNumber(st.wish);
+                                            if (wishCnt2 != null) {
+                                                try { $row.find('.btn-wish-count').first().text(wishCnt2); } catch(e){}
+                                                try { $row.find('.summary-wish-cnt').first().text(wishCnt2); } catch(e){}
+                                            }
+                                            var userHasWish2 = false;
+                                            if (typeof st.userHasWish !== 'undefined') userHasWish2 = !!st.userHasWish;
+                                            else if (typeof st.userHas !== 'undefined') userHasWish2 = !!st.userHas;
+                                            else if (typeof st.wished !== 'undefined') userHasWish2 = !!st.wished;
+                                            else if (typeof st.wishYn !== 'undefined') userHasWish2 = (String(st.wishYn).toUpperCase() === 'Y' || String(st.wishYn) === '1');
+                                            if (userHasWish2) $row.find('.btn-wish').first().addClass('active').attr('aria-pressed','true'); else $row.find('.btn-wish').first().removeClass('active').attr('aria-pressed','false');
+                                        } catch(e) { /* ignore wish update errors */ }
 
-                                            // populate average rating if present (support several possible field names)
-                                            try {
-                                                var avgVal = null;
-                                                if (typeof st.avgRating !== 'undefined') avgVal = st.avgRating;
-                                                else if (typeof st.avg !== 'undefined') avgVal = st.avg;
-                                                else if (typeof st.ratingAvg !== 'undefined') avgVal = st.ratingAvg;
-                                                else if (typeof st.average !== 'undefined') avgVal = st.average;
-                                                else if (typeof st.AVG_RATING !== 'undefined') avgVal = st.AVG_RATING;
+                                        // toggle has-review class
+                                        try { var $rvwBadge = $row.find('.btn-rvw-count').first(); if ($rvwBadge && $rvwBadge.length) { if (Number(combinedReviewCnt) > 0) $rvwBadge.addClass('has-review'); else $rvwBadge.removeClass('has-review'); } } catch(e){}
 
-                                                if (avgVal != null && String(avgVal).trim().length > 0 && !isNaN(Number(avgVal))) {
-                                                    var disp = Number(avgVal).toFixed(1);
-                                                    var $rAvg = $("tr[data-movie-id='" + k + "']");
-                                                    if ($rAvg && $rAvg.length) { $rAvg.find('.summary-rating-val').first().text(disp); }
-                                                }
-                                            } catch(e) { /* ignore avg parse errors */ }
-
-                                            // determine if user has left a review (rating, cmnt, reviewText)
+                                        // personal flags
+                                        try {
                                             var hasReview = false;
-                                            try {
-                                                var ratingVal = (typeof st.rating !== 'undefined') ? st.rating : (typeof st.RATING !== 'undefined' ? st.RATING : null);
-                                                var cmntVal = (typeof st.cmnt !== 'undefined') ? st.cmnt : (typeof st.CMNT !== 'undefined' ? st.CMNT : (typeof st.comment !== 'undefined' ? st.comment : null));
-                                                var reviewTextVal = (typeof st.reviewText !== 'undefined') ? st.reviewText : (typeof st.REVIEW_TEXT !== 'undefined' ? st.REVIEW_TEXT : (typeof st.text !== 'undefined' ? st.text : null));
-                                                try { if (ratingVal != null && String(ratingVal).trim().length > 0) hasReview = true; } catch(e){}
-                                                try { if (!hasReview && cmntVal != null && String(cmntVal).trim().length > 0) hasReview = true; } catch(e){}
-                                                try { if (!hasReview && reviewTextVal != null && String(reviewTextVal).trim().length > 0) hasReview = true; } catch(e){}
-                                            } catch(e) { /* ignore review parse errors */ }
-
-                                            // determine if user marked movie as read/watched
-                                            var hasRead = false;
-                                            try {
-                                                var readVal = null;
-                                                if (typeof st.readYn !== 'undefined') readVal = st.readYn;
-                                                else if (typeof st.READ_YN !== 'undefined') readVal = st.READ_YN;
-                                                else if (typeof st.read !== 'undefined') readVal = st.read;
-                                                else if (typeof st.readCount !== 'undefined') readVal = st.readCount;
-
-                                                if (readVal != null) {
-                                                    try {
-                                                        var s = String(readVal).trim();
-                                                        if (s.length === 0) { /* empty */ }
-                                                        else if (s === 'Y' || s === 'y' || s === '1' || s.toLowerCase() === 'true') hasRead = true;
-                                                        else if (!isNaN(Number(s)) && Number(s) > 0) hasRead = true;
-                                                    } catch(e) { /* ignore coercion errors */ }
-                                                }
-                                            } catch(e) { /* ignore read parse errors */ }
-
-                                            // apply UI state to the matching row(s)
-                                            if (hasReview) {
-                                                var $r = $("tr[data-movie-id='" + k + "']");
-                                                if ($r && $r.length) { $r.find('.btn-rvw').first().addClass('active').attr('aria-pressed','true'); }
+                                            if (typeof st.hasUserReview !== 'undefined') hasReview = !!st.hasUserReview;
+                                            else if (typeof st.userHasReview !== 'undefined') hasReview = !!st.userHasReview;
+                                            else {
+                                                try { if (typeof st.rating !== 'undefined' && st.rating != null && String(st.rating).trim().length>0) hasReview = true; } catch(e){}
+                                                try { if (!hasReview) { var _cm = (typeof st.cmnt !== 'undefined' ? st.cmnt : (typeof st.CMNT !== 'undefined' ? st.CMNT : null)); if (_cm != null && String(_cm).trim().length>0) hasReview = true; } } catch(e){}
+                                                try { if (!hasReview) { var _rt = (typeof st.reviewText !== 'undefined' ? st.reviewText : (typeof st.REVIEW_TEXT !== 'undefined' ? st.REVIEW_TEXT : null)); if (_rt != null && String(_rt).trim().length>0) hasReview = true; } } catch(e){}
                                             }
-                                            if (hasRead) {
-                                                var $r2 = $("tr[data-movie-id='" + k + "']");
-                                                if ($r2 && $r2.length) { $r2.find('.btn-read').first().addClass('active').attr('aria-pressed','true'); }
-                                            }
-                                        } catch(e) { /* ignore per-key errors */ }
-                                    });
+                                            if (hasReview) $row.find('.btn-rvw').first().addClass('active').attr('aria-pressed','true');
+                                            else $row.find('.btn-rvw').first().removeClass('active').attr('aria-pressed','false');
+                                            // read flag
+                                            try { var hasRead = false; if (typeof st.userRead !== 'undefined') hasRead = !!st.userRead; else { var ryn = (st.readYn !== undefined ? st.readYn : (st.READ_YN !== undefined ? st.READ_YN : null)); if (ryn != null) { var s = String(ryn).trim(); if (s === 'Y' || s === '1' || s.toLowerCase() === 'true') hasRead = true; } } if (hasRead) $row.find('.btn-read').first().addClass('active').attr('aria-pressed','true'); else $row.find('.btn-read').first().removeClass('active').attr('aria-pressed','false'); } catch(e){}
+                                        } catch(e) { console.warn('applyStatus error', e); }
+                                    } catch(e) { console.error('applyStatus error', e); }
                                 }
-                            } catch(e) { console.error('movie status handler error', e); }
+
+                                // resp.data may be map keyed by mvId or array
+                                if (Array.isArray(resp.data)) {
+                                   resp.data.forEach(function(st){ try { applyStatus(st); } catch(e){} });
+                                } else {
+                                    Object.keys(resp.data).forEach(function(k){ try { var st = resp.data[k]; if (st && (typeof st.MV_ID === 'undefined' || st.MV_ID === null)) st.MV_ID = k; applyStatus(st); } catch(e){} });
+                                }
+                            } catch(e) { console.error('movie status batch handler error', e); }
                         },
-                        error: function() { /* ignore status lookup failures */ }
+                        error: function() { /* ignore failures */ }
                     });
                 }
-            } catch(e) { console.error('movie status lookup error', e); }
-    	} catch (e) {
-	        console.error('renderMovieResults error', e);
-	        $('#resultArea').html("<p style='padding:40px; color:#999; text-align:center;'>검색 결과를 처리할 수 없습니다.</p>");
-	    }
+            } catch(e) { console.error('movie status fetch error', e); }
+
+             // After rendering movie rows, batch-fetch genre names for any rows that included genre ids
+             try {
+                 var allGenreIds = [];
+                 $table.find('tr[data-genre-ids]').each(function(){
+                     try {
+                         var s = $(this).attr('data-genre-ids') || '';
+                         if (!s) return;
+                         s.split(',').forEach(function(id){
+                             try {
+                                 var nid = Number(String(id).trim());
+                                 if (!isNaN(nid) && allGenreIds.indexOf(nid) === -1) allGenreIds.push(nid);
+                             } catch(e) {}
+                         });
+                     } catch(e) {}
+                 });
+                 if (allGenreIds.length > 0) {
+                     $.ajax({
+                         url: contextPath + '/genre/names',
+                         type: 'POST',
+                         contentType: 'application/json; charset=UTF-8',
+                         data: JSON.stringify({ ids: allGenreIds }),
+                         success: function(resp) {
+                             try {
+                                 if (resp && resp.status === 'OK' && resp.data) {
+                                     var map = resp.data; // id->name map
+                                     $table.find('tr[data-genre-ids]').each(function(){
+                                         try {
+                                             var $r = $(this);
+                                             var s = $r.attr('data-genre-ids') || '';
+                                             if (!s) return;
+                                             var names = [];
+                                             s.split(',').forEach(function(id){
+                                                 try {
+                                                     var key = String(id).trim();
+                                                     var nm = map[key] || map[Number(key)] || '';
+                                                     if (nm) names.push(nm);
+                                                 } catch(e) {}
+                                             });
+                                             if (names.length > 0) {
+                                                 try { $r.find('.info-genres').first().text(names.join(', ')); } catch(e) {}
+                                             }
+                                         } catch(e) {}
+                                     });
+                                 }
+                             } catch(e) { console.error('genre names handler error', e); }
+                         },
+                         error: function() { /* ignore genre lookup failures */ }
+                     });
+                 }
+             } catch(e) { console.error('genre lookup error', e); }
+            } catch (e) { console.error('renderMovieResults error', e); }
     }
 
     // performSearch: query the server-side search endpoint and render results
@@ -714,6 +1281,7 @@ $(document).ready(function() {
                         openReviewModal(pendingItem, $btn);
                         return;
                     }
+                    
                     $.ajax({
                         url: contextPath + '/review/status',
                         type: 'POST',
@@ -800,12 +1368,87 @@ $(document).ready(function() {
         var $row = $btn.closest('tr');
         var domIsbn = $row.attr('data-isbn') || $row.find('.item-isbn').val() || '';
         var domIsbn13 = $row.attr('data-isbn13') || $row.find('.item-isbn13').val() || '';
+        var domMvId = $row.attr('data-movie-id') || $row.find('.item-movie-id').val() || '';
         var title = $row.find('.info-title').text() || '';
         var author = $row.find('.info-author').text() || '';
         var rawKey = (domIsbn && domIsbn.length) ? domIsbn : (title + '|' + author);
-        var pendingItem = { isbn: domIsbn || '', isbn13: domIsbn13 || '', title: title || '', author: author || '', rawKey: rawKey };
+        var pendingItem = { isbn: domIsbn || '', isbn13: domIsbn13 || '', mvId: domMvId || '', title: title || '', author: author || '', rawKey: rawKey };
 
         requireLoginThen(function() {
+            // If this row represents a movie (mvId present), use movie endpoints and movie localStorage key
+            if (domMvId && String(domMvId).trim().length > 0) {
+                var mvIdNum = domMvId;
+                var storageKey = makeStorageKey('mn_wish_movie', String(mvIdNum));
+                if (!$btn.hasClass('active')) {
+                    // optimistic UI update: adjust visible count immediately so user sees instant feedback
+                    var $countEl = $btn.closest('tr').find('.btn-wish-count').first();
+                    var _oldCnt = null;
+                    try { var t = $countEl.text().trim(); _oldCnt = (t !== '' && !isNaN(Number(t))) ? Number(t) : null; } catch(e) { _oldCnt = null; }
+
+                    $.ajax({
+                        url: contextPath + '/wish/add',
+                        type: 'POST',
+                        contentType: 'application/json; charset=UTF-8',
+                        data: JSON.stringify({ mvId: mvIdNum }),
+                        success: function(resp) {
+                            try {
+                                if (resp && resp.status === 'OK') {
+                                    $btn.addClass('active').attr('aria-pressed','true');
+                                    try { localStorage.setItem(storageKey, '1'); } catch(e) {}
+                                    // update count if server returned it
+                                    try {
+                                        var cnt = null;
+                                        if (resp.data && typeof resp.data.count !== 'undefined') cnt = resp.data.count;
+                                        else if (typeof resp.count !== 'undefined') cnt = resp.count;
+                                        else if (resp.data && typeof resp.data.wishCount !== 'undefined') cnt = resp.data.wishCount;
+                                        if (cnt != null) {
+                                        	$btn.closest('tr').find('.btn-wish-count').first().text(cnt);
+                                   	 	} else {
+                                            // if server didn't return count, apply optimistic increment
+                                            try { if (_oldCnt == null) $btn.closest('tr').find('.btn-wish-count').first().text('1'); else $btn.closest('tr').find('.btn-wish-count').first().text(String(_oldCnt + 1)); } catch(e) {}
+                                        }
+                                    } catch(e) {}
+                                } else {
+                                    alert('위시리스트에 추가에 실패했습니다. 다시 시도해주세요.');
+                                }
+                            } catch (e) { console.error('movie wish add success handler error', e); alert('오류가 발생했습니다.'); }
+                        },
+                        error: function(xhr) { console.error('movie wish add AJAX error', xhr.status); try { if (_oldCnt != null) $btn.closest('tr').find('.btn-wish-count').first().text(String(_oldCnt)); } catch(e){} alert('서버에 위시리스트 추가를 요청하지 못했습니다.'); }
+                    });
+                } else {
+                    $.ajax({
+                        url: contextPath + '/wish/remove',
+                        type: 'POST',
+                        contentType: 'application/json; charset=UTF-8',
+                        data: JSON.stringify({ mvId: mvIdNum }),
+                        success: function(resp) {
+                            try {
+                                if (resp && resp.status === 'OK') {
+                                    $btn.removeClass('active').attr('aria-pressed','false');
+                                    try { localStorage.removeItem(storageKey); } catch(e) {}
+                                    try {
+                                        var cnt = null;
+                                        if (resp.data && typeof resp.data.count !== 'undefined') cnt = resp.data.count;
+                                        else if (typeof resp.count !== 'undefined') cnt = resp.count;
+                                        else if (resp.data && typeof resp.data.wishCount !== 'undefined') cnt = resp.data.wishCount;
+                                        if (cnt != null) $btn.closest('tr').find('.btn-wish-count').first().text(cnt);
+                                    } catch(e) {}
+                                } else {
+                                    alert('위시리스트 제거에 실패했습니다. 다시 시도해주세요.');
+                                }
+                            } catch (e) { console.error('movie wish remove success handler error', e); alert('오류가 발생했습니다.'); }
+                        },
+                        error: function(xhr) { console.error('movie wish remove AJAX error', xhr.status); try { if (_oldCnt != null) $btn.closest('tr').find('.btn-wish-count').first().text(String(_oldCnt)); } catch(e){} alert('서버에 위시리스트 제거를 요청하지 못했습니다.'); }
+                    });
+                }
+                return;
+            }
+
+            // Fallback: book flow (existing behavior)
+            // optimistic UI update for book rows as well
+            var $countEl2 = $btn.closest('tr').find('.btn-wish-count').first();
+            var _oldCnt2 = null;
+            try { var tt = $countEl2.text().trim(); _oldCnt2 = (tt !== '' && !isNaN(Number(tt))) ? Number(tt) : null; } catch(e) { _oldCnt2 = null; }
             if (!$btn.hasClass('active')) {
                 var payload = { isbn: pendingItem.isbn, isbn13: pendingItem.isbn13 };
                 $.ajax({
@@ -818,12 +1461,21 @@ $(document).ready(function() {
                             if (resp && resp.status === 'OK') {
                                 $btn.addClass('active').attr('aria-pressed','true');
                                 try { localStorage.setItem(makeStorageKey('mn_wish', rawKey), '1'); } catch(e){}
+                                // update count if available, else optimistic increment
+                                try {
+                                    var cnt = null;
+                                    if (resp.data && typeof resp.data.count !== 'undefined') cnt = resp.data.count;
+                                    else if (typeof resp.count !== 'undefined') cnt = resp.count;
+                                    else if (resp.data && typeof resp.data.wishCount !== 'undefined') cnt = resp.data.wishCount;
+                                    if (cnt != null) $btn.closest('tr').find('.btn-wish-count').first().text(cnt);
+                                    else { if (_oldCnt2 == null) $btn.closest('tr').find('.btn-wish-count').first().text('1'); else $btn.closest('tr').find('.btn-wish-count').first().text(String(_oldCnt2 + 1)); }
+                                } catch(e) {}
                             } else {
                                 alert('위시리스트에 추가에 실패했습니다. 다시 시도해주세요.');
                             }
                         } catch (e) { console.error('wish add success handler error', e); alert('오류가 발생했습니다.'); }
                     },
-                    error: function(xhr) { console.error('wish add AJAX error', xhr.status); alert('서버에 위시리스트 추가를 요청하지 못했습니다.'); }
+                    error: function(xhr) { console.error('wish add AJAX error', xhr.status); try { if (_oldCnt2 != null) $btn.closest('tr').find('.btn-wish-count').first().text(String(_oldCnt2)); } catch(e){} alert('서버에 위시리스트 추가를 요청하지 못했습니다.'); }
                 });
             } else {
                 var payload = { isbn: pendingItem.isbn, isbn13: pendingItem.isbn13 };
@@ -837,16 +1489,24 @@ $(document).ready(function() {
                             if (resp && resp.status === 'OK') {
                                 $btn.removeClass('active').attr('aria-pressed','false');
                                 try { localStorage.removeItem(makeStorageKey('mn_wish', rawKey)); } catch(e){}
+                                try {
+                                    var cnt = null;
+                                    if (resp.data && typeof resp.data.count !== 'undefined') cnt = resp.data.count;
+                                    else if (typeof resp.count !== 'undefined') cnt = resp.count;
+                                    else if (resp.data && typeof resp.data.wishCount !== 'undefined') cnt = resp.data.wishCount;
+                                    if (cnt != null) $btn.closest('tr').find('.btn-wish-count').first().text(cnt);
+                                    else { if (_oldCnt2 == null) $btn.closest('tr').find('.btn-wish-count').first().text('0'); else $btn.closest('tr').find('.btn-wish-count').first().text(String(Math.max(0, _oldCnt2 - 1))); }
+                                } catch(e) {}
                             } else {
                                 alert('위시리스트 제거에 실패했습니다. 다시 시도해주세요.');
                             }
                         } catch (e) { console.error('wish remove success handler error', e); alert('오류가 발생했습니다.'); }
                     },
-                    error: function(xhr) { console.error('wish remove AJAX error', xhr.status); alert('서버에 위시리스트 제거를 요청하지 못했습니다.'); }
+                    error: function(xhr) { console.error('wish remove AJAX error', xhr.status); try { if (_oldCnt2 != null) $btn.closest('tr').find('.btn-wish-count').first().text(String(_oldCnt2)); } catch(e){} alert('서버에 위시리스트 제거를 요청하지 못했습니다.'); }
                 });
             }
-        }, { type: 'wish', item: pendingItem });
-    });
+         }, { type: 'wish', item: pendingItem });
+     });
 
     // Review modal handlers
     let currentReviewItem = null;
@@ -1059,59 +1719,86 @@ $(document).ready(function() {
         console.log('Submitting reviewData:', reviewData);
 
         // Send review data to server (form-encoded to be compatible with server fallback)
-        $.ajax({
-            url: contextPath + "/review/save",
-            type: "POST",
-            contentType: "application/x-www-form-urlencoded; charset=UTF-8",
-            data: $.param(reviewData),
-            success: function(response) {
-                // On success: close modal, persist like state and update button UI
-                const rawKey = currentReviewItem.isbn && currentReviewItem.isbn.length ? currentReviewItem.isbn : (currentReviewItem.title + '|' + (currentReviewItem.author || ''));
-                const likeKey = makeStorageKey('mn_like', rawKey);
-                const readKey = makeStorageKey('mn_read', rawKey);
-                // persist like and read state locally
-                try { localStorage.setItem(likeKey, '1'); } catch(e) {}
-                try { localStorage.setItem(readKey, '1'); } catch(e) {}
-
-                // update UI: activate the like button (if available) and the read button in the same row
-                try {
-                    if (currentLikeButton) {
-                        currentLikeButton.addClass('active').attr('aria-pressed', 'true');
-                        try {
-                            var $row = currentLikeButton.closest('tr');
-                            var $readBtn = $row.find('.btn-read').first();
-                            if ($readBtn && $readBtn.length) $readBtn.addClass('active').attr('aria-pressed','true');
-                        } catch (e) { /* ignore */ }
-                    } else {
-                        // fallback: try to locate row by ISBN/ISBN13 or title and set read button active
-                        try {
-                            if (currentReviewItem && currentReviewItem.isbn && currentReviewItem.isbn.length) {
-                                var $r = $("tr[data-isbn='" + currentReviewItem.isbn + "']");
-                                if ($r && $r.length) { $r.find('.btn-read').first().addClass('active').attr('aria-pressed','true'); }
-                            } else if (currentReviewItem && currentReviewItem.isbn13 && currentReviewItem.isbn13.length) {
-                                var $r2 = $("tr[data-isbn13='" + currentReviewItem.isbn13 + "']");
-                                if ($r2 && $r2.length) { $r2.find('.btn-read').first().addClass('active').attr('aria-pressed','true'); }
-                            } else if (currentReviewItem && currentReviewItem.title) {
-                                $('#resultArea .result-table tr').each(function(){
-                                    var $rr = $(this);
-                                    var t = $rr.find('.info-title').text().trim();
-                                    if (t === (currentReviewItem.title || '').trim()) {
-                                        $rr.find('.btn-read').first().addClass('active').attr('aria-pressed','true');
-                                    }
-                                });
-                            }
-                        } catch (e) { /* ignore fallback errors */ }
-                    }
-                } catch (e) { console.error('Error updating like/read UI', e); }
-
-                closeReviewModal();
-                alert('리뷰가 저장되었습니다.');
-            },
-            error: function(xhr) {
-                console.error("리뷰 저장 에러:", xhr.status);
-                alert('리뷰 저장 중 오류가 발생했습니다. 나중에 다시 시도해주세요.');
-            }
-        });
+       $.ajax({
+		    url: contextPath + "/review/save",
+		    type: "POST",
+		    contentType: "application/x-www-form-urlencoded; charset=UTF-8",
+		    data: $.param(reviewData)
+		}).done(function(response) {
+		    // 1. 데이터 키 설정 및 로컬 스토리지 저장
+		    const rawKey = (currentReviewItem.isbn && currentReviewItem.isbn.length) 
+		                   ? currentReviewItem.isbn 
+		                   : (currentReviewItem.title + '|' + (currentReviewItem.author || ''));
+		    
+		    try {
+		        localStorage.setItem(makeStorageKey('mn_like', rawKey), '1');
+		        localStorage.setItem(makeStorageKey('mn_read', rawKey), '1');
+		    } catch(e) { /* 스토리지 용량 초과 등 무시 */ }
+		
+		    // 2. 대상 행(Row) 찾기 로직 통합
+		    var $targetRow = (currentLikeButton && currentLikeButton.length) ? currentLikeButton.closest('tr') : $();
+		    
+		    if (!$targetRow.length && currentReviewItem) {
+		        if (currentReviewItem.mvId) {
+		            $targetRow = $("tr[data-movie-id='" + currentReviewItem.mvId + "']");
+		        } else if (currentReviewItem.isbn) {
+		            $targetRow = $("tr[data-isbn='" + currentReviewItem.isbn + "']");
+		        } else if (currentReviewItem.isbn13) {
+		            $targetRow = $("tr[data-isbn13='" + currentReviewItem.isbn13 + "']");
+		        } else if (currentReviewItem.title) {
+		            $('#resultArea .result-table tr').each(function() {
+		                if ($(this).find('.info-title').text().trim() === currentReviewItem.title.trim()) {
+		                    $targetRow = $(this);
+		                    return false;
+		                }
+		            });
+		        }
+		    }
+		
+		    // 3. UI 즉시 업데이트 (버튼 활성화 및 평점 표시)
+		    if ($targetRow.length) {
+		        $targetRow.find('.btn-rvw, .btn-read').addClass('active').attr('aria-pressed', 'true');
+		        
+		        if (reviewData.rating) {
+		            var disp = Number(reviewData.rating).toFixed(1);
+		            if (!isNaN(disp)) $targetRow.find('.summary-rating-val').first().text(disp);
+		        }
+		    }
+		
+		    // 4. 서버로부터 최신 카운트(리뷰 수, 읽음 수) 갱신
+		    var isMovie = currentReviewItem && currentReviewItem.mvId;
+		    var statusUrl = isMovie ? '/review/status' : '/review/summary';
+		    var statusData = isMovie 
+		                     ? JSON.stringify({ mvIds: [ String(currentReviewItem.mvId).trim() ] })
+		                     : JSON.stringify({ isbn: currentReviewItem.isbn || '', isbn13: currentReviewItem.isbn13 || '' });
+		
+		    $.ajax({
+		        url: contextPath + statusUrl,
+		        type: 'POST',
+		        contentType: 'application/json; charset=UTF-8',
+		        data: statusData
+		    }).done(function(resp) {
+		        if (resp && resp.status === 'OK' && resp.data && $targetRow.length) {
+		            var s = isMovie ? resp.data[currentReviewItem.mvId] : resp.data;
+		            if (!s) return;
+		
+		            // 필드명 맵핑 (다양한 서버 응답 케이스 대응)
+		            var rCnt = s.reviewCount || s.REVIEW_WITH_TEXT_CNT || s.review_with_text_cnt || s.likeCount || 0;
+		            var dCnt = s.readCount || s.READ_CNT || s.read_cnt || 0;
+		
+		            $targetRow.find('.btn-rvw-count, .summary-rvw-cnt').text(rCnt);
+		            $targetRow.find('.btn-read-count, .summary-read-cnt').text(dCnt);
+		        }
+		    });
+		
+		    // 5. 마무리
+		    closeReviewModal();
+		    alert('리뷰가 저장되었습니다.');
+		
+		}).fail(function(xhr) {
+		    console.error('리뷰 저장 실패:', xhr.status);
+		    alert('리뷰 저장 중 오류가 발생했습니다.');
+		}); // <--- AJAX 종료 괄호 확인
     });
 
     // small helper: render star display based on select value
@@ -1163,7 +1850,9 @@ $(document).ready(function() {
                     // remove saved search state after restoring so we don't re-run on subsequent loads
                     try { localStorage.removeItem('mn_search_state'); } catch(e){}
                 }
-            } catch (e) { console.error('Failed to parse saved search state', e); }
+            } catch (e) {
+                console.error('Failed to parse saved search state', e);
+            }
         }
 
         // 2) Restore any pending action saved before redirecting to login
@@ -1238,25 +1927,48 @@ $(document).ready(function() {
                         if (pending.type === 'like' && pending.item) {
                             // try to locate the row and simulate opening edit modal flow: first attempt to fetch status then open modal
                             var pItem = pending.item;
-                            var payload = { isbns: [], isbns13: [] };
-                            if (pItem.isbn && pItem.isbn.toString().trim().length > 0) payload.isbns.push(pItem.isbn.toString().trim());
-                            if (pItem.isbn13 && pItem.isbn13.toString().trim().length > 0) payload.isbns13.push(pItem.isbn13.toString().trim());
-                            $.ajax({
-                                url: contextPath + '/review/status',
-                                type: 'POST',
-                                contentType: 'application/json; charset=UTF-8',
-                                data: JSON.stringify(payload),
-                                success: function(resp) {
-                                    var statusObj = null;
-                                    try {
-                                        if (resp && resp.status === 'OK' && resp.data) {
-                                            try { statusObj = findStatusForItem(resp.data, pItem); } catch(e){ statusObj = null; }
-                                        }
-                                    } catch (e) { }
-                                    openEditReviewModal(pItem, null, statusObj);
-                                },
-                                error: function() { openEditReviewModal(pItem, null, null); }
-                            });
+                            // If this pending item has a movie id, ask status by mvIds; otherwise ask by ISBNs
+                            try {
+                                if (pItem.mvId && String(pItem.mvId).trim().length > 0) {
+                                    var mvPayload = { mvIds: [ pItem.mvId ] };
+                                    $.ajax({
+                                        url: contextPath + '/review/status',
+                                        type: 'POST',
+                                        contentType: 'application/json; charset=UTF-8',
+                                        data: JSON.stringify(mvPayload),
+                                        success: function(resp) {
+                                            var statusObj = null;
+                                            try {
+                                                if (resp && resp.status === 'OK' && resp.data) {
+                                                    try { statusObj = resp.data[String(pItem.mvId)]; } catch(e) { statusObj = null; }
+                                                }
+                                            } catch (e) { }
+                                            openEditReviewModal(pItem, null, statusObj);
+                                        },
+                                        error: function() { openEditReviewModal(pItem, null, null); }
+                                    });
+                                } else {
+                                    var payload = { isbns: [], isbns13: [] };
+                                    if (pItem.isbn && pItem.isbn.toString().trim().length > 0) payload.isbns.push(pItem.isbn.toString().trim());
+                                    if (pItem.isbn13 && pItem.isbn13.toString().trim().length > 0) payload.isbns13.push(pItem.isbn13.toString().trim());
+                                    $.ajax({
+                                        url: contextPath + '/review/status',
+                                        type: 'POST',
+                                        contentType: 'application/json; charset=UTF-8',
+                                        data: JSON.stringify(payload),
+                                        success: function(resp) {
+                                            var statusObj = null;
+                                            try {
+                                                if (resp && resp.status === 'OK' && resp.data) {
+                                                    try { statusObj = findStatusForItem(resp.data, pItem); } catch(e) { statusObj = null; }
+                                                }
+                                            } catch (e) { }
+                                            openEditReviewModal(pItem, null, statusObj);
+                                        },
+                                        error: function() { openEditReviewModal(pItem, null, null); }
+                                    });
+                                }
+                            } catch (e) { console.error('resume pending like handler error', e); openEditReviewModal(pItem, null, null); }
                         }
                     }
                 } catch (e) { console.error('Failed to resume pending action', e); }

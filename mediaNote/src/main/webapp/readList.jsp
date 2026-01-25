@@ -403,7 +403,21 @@
             var fallbackKey = (!itemIsbn && currentReviewItem) ? ((currentReviewItem.title || '') + '|' + (currentReviewItem.author || '')) : '';
             var reviewData = { itemId: itemIsbn, itemKey: fallbackKey, isbn: currentReviewItem && currentReviewItem.isbn ? currentReviewItem.isbn : '', isbn13: currentReviewItem && currentReviewItem.isbn13 ? currentReviewItem.isbn13 : '', title: currentReviewItem && currentReviewItem.title ? currentReviewItem.title : '', author: currentReviewItem && currentReviewItem.author ? currentReviewItem.author : '', rating: rating, comment: comment, text: text };
             if ((!reviewData.itemId || reviewData.itemId.trim() === '') && (!reviewData.itemKey || reviewData.itemKey.trim() === '')) { alert('도서 식별자(ISBN) 또는 항목 정보가 없습니다. 검색에서 해당 항목을 선택한 뒤 다시 시도해주세요.'); return; }
-            $.ajax({ url: ctx + '/review/save', type: 'POST', contentType: 'application/x-www-form-urlencoded; charset=UTF-8', data: $.param(reviewData), success: function(response){ try { var rawKey = currentReviewItem.isbn && currentReviewItem.isbn.length ? currentReviewItem.isbn : (currentReviewItem.title + '|' + (currentReviewItem.author || '')); try{ localStorage.setItem(makeStorageKey('mn_like', rawKey), '1'); }catch(e){} try{ localStorage.setItem(makeStorageKey('mn_read', rawKey), '1'); }catch(e){} if (currentLikeButton) { currentLikeButton.addClass('active').attr('aria-pressed','true'); try { currentLikeButton.closest('tr').find('.btn-read').first().addClass('active').attr('aria-pressed','true'); } catch(e){} } closeReviewModal(); alert('리뷰가 저장되었습니다.'); } catch(e){ console.error('save success handler error', e); alert('리뷰 저장 중 오류가 발생했습니다.'); } }, error: function(xhr){ console.error('Review save error', xhr.status); alert('리뷰 저장 중 오류가 발생했습니다.'); } });
+            $.ajax({ url: ctx + '/review/save', type: 'POST', contentType: 'application/x-www-form-urlencoded; charset=UTF-8', data: $.param(reviewData), success: function(response){ try { var rawKey = currentReviewItem.isbn && currentReviewItem.isbn.length ? currentReviewItem.isbn : (currentReviewItem.title + '|' + (currentReviewItem.author || '')); try{ localStorage.setItem(makeStorageKey('mn_like', rawKey), '1'); }catch(e){} try{ localStorage.setItem(makeStorageKey('mn_read', rawKey), '1'); }catch(e){} if (currentLikeButton) { currentLikeButton.addClass('active').attr('aria-pressed','true'); try { currentLikeButton.closest('tr').find('.btn-read').first().addClass('active').attr('aria-pressed','true'); } catch(e){} }
++                    // Update per-row displayed rating immediately
++                    try {
++                        var savedRating = reviewData.rating;
++                        var disp = null;
++                        try { if (savedRating != null && String(savedRating).trim().length>0 && !isNaN(Number(savedRating))) disp = Number(savedRating).toFixed(1); } catch(e){ disp = null; }
++                        if (disp != null) {
++                            var $target = null;
++                            try { if (currentLikeButton && currentLikeButton.length) $target = currentLikeButton.closest('tr'); } catch(e){}
++                            try { if ((!$target || $target.length===0) && currentReviewItem && currentReviewItem.isbn && currentReviewItem.isbn.length) $target = $("tr[data-isbn='" + currentReviewItem.isbn + "']"); } catch(e){}
++                            try { if ((!$target || $target.length===0) && currentReviewItem && currentReviewItem.isbn13 && currentReviewItem.isbn13.length) $target = $("tr[data-isbn13='" + currentReviewItem.isbn13 + "']"); } catch(e){}
++                            try { if ($target && $target.length) $target.find('.summary-rating-val').first().text(disp); } catch(e){}
++                        }
++                    } catch(e) { console.error('readList immediate rating update error', e); }
+                     closeReviewModal(); alert('리뷰가 저장되었습니다.'); } catch(e){ console.error('save success handler error', e); alert('리뷰 저장 중 오류가 발생했습니다.'); } }, error: function(xhr){ console.error('Review save error', xhr.status); alert('리뷰 저장 중 오류가 발생했습니다.'); } });
         });
 
         // render stars helper and bindings

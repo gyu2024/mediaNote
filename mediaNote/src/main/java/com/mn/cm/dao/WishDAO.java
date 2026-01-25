@@ -51,6 +51,36 @@ public class WishDAO {
         return (cnt == null) ? 0L : cnt.longValue();
     }
 
+    // New: movie-wish support
+    public void insertOrUpdateMovieWish(String userId, Integer mvId) {
+        Map<String,Object> params = new HashMap<>();
+        params.put("userId", userId);
+        params.put("mvId", mvId);
+        sqlSession.insert("com.mn.cm.dao.WishMapper.insertOrUpdateMovieWish", params);
+    }
+
+    public void deleteMovieWish(String userId, Integer mvId) {
+        Map<String,Object> params = new HashMap<>();
+        params.put("userId", userId);
+        params.put("mvId", mvId);
+        sqlSession.delete("com.mn.cm.dao.WishMapper.deleteMovieWish", params);
+    }
+
+    public long selectMovieWishCount(Integer mvId) {
+        Map<String,Object> params = new HashMap<>();
+        params.put("mvId", mvId);
+        Long cnt = sqlSession.selectOne("com.mn.cm.dao.WishMapper.selectMovieWishCount", params);
+        return (cnt == null) ? 0L : cnt.longValue();
+    }
+
+    public long selectUserMovieWishCount(String userId, Integer mvId) {
+        Map<String,Object> params = new HashMap<>();
+        params.put("userId", (userId != null) ? userId : "");
+        params.put("mvId", mvId);
+        Long cnt = sqlSession.selectOne("com.mn.cm.dao.WishMapper.selectUserMovieWishCount", params);
+        return (cnt == null) ? 0L : cnt.longValue();
+    }
+
     // New: fetch wishlist items for a user with optional pagination
     public java.util.List<java.util.Map<String,Object>> selectWishesByUser(String userId, Integer offset, Integer limit) {
         Map<String,Object> params = new HashMap<>();

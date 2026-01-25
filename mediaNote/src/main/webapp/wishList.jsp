@@ -491,16 +491,23 @@
         });
 
         $('#rvw_save').on('click', function() {
-            var rating = $('#rvw_rating').val();
-            var comment = $('#rvw_comnet').val();
-            var text = $('#rvw_text').val();
+            const rating = $('#rvw_rating').val();
+            const comment = $('#rvw_comnet').val();
+            const text = $('#rvw_text').val();
 
-            if (!rating) { alert('평점을 선택해주세요.'); return; }
-            if (!currentReviewItem) { alert('리뷰할 항목 정보가 없습니다. 다시 시도해주세요.'); return; }
+            if (!rating) {
+                alert('평점을 선택해주세요.');
+                return;
+            }
 
-            var itemIsbn = (currentReviewItem && (currentReviewItem.isbn || currentReviewItem.isbn13 || currentReviewItem.isbn10)) ? (currentReviewItem.isbn || currentReviewItem.isbn13 || currentReviewItem.isbn10) : '';
-            var fallbackKey = (!itemIsbn && currentReviewItem) ? ((currentReviewItem.title || '') + '|' + (currentReviewItem.author || '')) : '';
-            var reviewData = {
+            if (!currentReviewItem) {
+                alert('리뷰할 항목 정보가 없습니다. 다시 시도해주세요.');
+                return;
+            }
+
+            const itemIsbn = (currentReviewItem && (currentReviewItem.isbn || currentReviewItem.isbn13 || currentReviewItem.isbn10)) ? (currentReviewItem.isbn || currentReviewItem.isbn13 || currentReviewItem.isbn10) : '';
+            const fallbackKey = (!itemIsbn && currentReviewItem) ? ((currentReviewItem.title || '') + '|' + (currentReviewItem.author || '')) : '';
+            const reviewData = {
                 itemId: itemIsbn,
                 itemKey: fallbackKey,
                 isbn: currentReviewItem && currentReviewItem.isbn ? currentReviewItem.isbn : '',
@@ -512,9 +519,55 @@
                 text: text
             };
 
-            if ((!reviewData.itemId || reviewData.itemId.trim() === '') && (!reviewData.itemKey || reviewData.itemKey.trim() === '')) { alert('도서 식별자(ISBN) 또는 항목 정보가 없습니다. 검색에서 해당 항목을 선택한 뒤 다시 시도해주세요.'); return; }
+            // If neither an ISBN nor an item key is present, block
+            if (( (!reviewData.itemId || reviewData.itemId.trim() === '') && (!reviewData.itemKey || reviewData.itemKey.trim() === '') )) {
+                alert('도서 식별자(ISBN) 또는 항목 정보가 없습니다. 다시 시도해주세요.');
+                return;
+            }
 
-            $.ajax({ url: ctx + '/review/save', type: 'POST', contentType: 'application/x-www-form-urlencoded; charset=UTF-8', data: $.param(reviewData), success: function(response){ try { var rawKey = currentReviewItem.isbn && currentReviewItem.isbn.length ? currentReviewItem.isbn : (currentReviewItem.title + '|' + (currentReviewItem.author || '')); var likeKey = makeStorageKey('mn_like', rawKey); var readKey = makeStorageKey('mn_read', rawKey); try { localStorage.setItem(likeKey, '1'); } catch(e){} try { localStorage.setItem(readKey, '1'); } catch(e){} try { if (currentLikeButton) { currentLikeButton.addClass('active').attr('aria-pressed','true'); try { var $row = currentLikeButton.closest('tr'); var $readBtn = $row.find('.btn-read').first(); if ($readBtn && $readBtn.length) $readBtn.addClass('active').attr('aria-pressed','true'); } catch(e){} } else { try { if (currentReviewItem && currentReviewItem.isbn && currentReviewItem.isbn.length) { var $r = $("tr[data-isbn='" + currentReviewItem.isbn + "']"); if ($r && $r.length) { $r.find('.btn-read').first().addClass('active').attr('aria-pressed','true'); } } else if (currentReviewItem && currentReviewItem.isbn13 && currentReviewItem.isbn13.length) { var $r2 = $("tr[data-isbn13='" + currentReviewItem.isbn13 + "']"); if ($r2 && $r2.length) { $r2.find('.btn-read').first().addClass('active').attr('aria-pressed','true'); } } else if (currentReviewItem && currentReviewItem.title) { $('#readArea .result-table tr').each(function(){ var $rr = $(this); var t = $rr.find('.info-title').text().trim(); if (t === (currentReviewItem.title || '').trim()) { $rr.find('.btn-read').first().addClass('active').attr('aria-pressed','true'); } }); } } catch(e){} } } catch(e) { console.error('Error updating like/read UI', e); } closeReviewModal(); alert('리뷰가 저장되었습니다.'); } catch(e){ console.error('save success handler error', e); alert('리뷰 저장 중 오류가 발생했습니다.'); } }, error: function(xhr){ console.error('Review save error', xhr.status); alert('리뷰 저장 중 오류가 발생했습니다.'); } });
+            $.ajax({
+                url: ctx + '/review/save',
+                type: 'POST',
+                contentType: 'application/x-www-form-urlencoded; charset=UTF-8',
+                data: $.param(reviewData),
+                success: function(resp) {
+                    try {
+                        if (resp && resp.status === 'OK') {
+                            // persist local like/read
+                            var rawKey = currentReviewItem.isbn && currentReviewItem.isbn.length ? currentReviewItem.isbn : (currentReviewItem.title + '|' + (currentReviewItem.author || ''));
+                            try { localStorage.setItem(makeStorageKey('mn_like', rawKey), '1'); } catch(e){}
+                            try { localStorage.setItem(makeStorageKey('mn_read', rawKey), '1'); } catch(e){}
+
+                            // Mark UI buttons
+                            if (currentLikeButton && currentLikeButton.length) {
+                                currentLikeButton.addClass('active').attr('aria-pressed','true');
+                                try { currentLikeButton.closest('tr').find('.btn-read').addClass('active').attr('aria-pressed','true'); } catch(e){}
+                            }
+
++                            // Immediately update per-row summary rating
++                            try {
++                                var savedRating = reviewData.rating;
++                                var disp = null;
++                                try { if (savedRating != null && String(savedRating).trim().length>0 && !isNaN(Number(savedRating))) disp = Number(savedRating).toFixed(1); } catch(e) { disp = null; }
++                                if (disp != null) {
++                                    var $target = null;
++                                    try { if (currentLikeButton && currentLikeButton.length) $target = currentLikeButton.closest('tr'); } catch(e){}
++                                    try { if ((!$target || $target.length===0) && currentReviewItem && currentReviewItem.isbn && currentReviewItem.isbn.length) $target = $("tr[data-isbn='" + currentReviewItem.isbn + "']"); } catch(e){}
++                                    try { if ($target && $target.length) $target.find('.summary-rating-val').first().text(disp); } catch(e){}
++                                }
++                            } catch(e) { console.error('wishList immediate rating update error', e); }
++
+                            closeReviewModal();
+                            alert('리뷰가 저장되었습니다.');
+                            // reload page sections
+                            loadWishList();
+                        } else {
+                            alert('리뷰 저장에 실패했습니다.');
+                        }
+                    } catch (e) { console.error('rvw_save success handler error', e); alert('리뷰 저장 중 오류가 발생했습니다.'); }
+                },
+                error: function(xhr) { console.error('review save AJAX error', xhr.status); alert('리뷰 저장 요청을 서버에 전달하지 못했습니다.'); }
+            });
         });
 
         function renderStars(val) {

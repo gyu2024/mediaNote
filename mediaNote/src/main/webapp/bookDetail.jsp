@@ -396,6 +396,15 @@ if (b != null) {
                 try { $('#detail_rvw_btn').addClass('active').attr('aria-pressed','true'); } catch(e){}
                 try { $('#detail_read_btn').addClass('active').attr('aria-pressed','true'); } catch(e){}
             } catch(e) {}
++            // Immediately update the big summary rating on detail page
++            try {
++                var savedRating = reviewData.rating || reviewData.rating;
++                var disp = null;
++                try { if (savedRating != null && String(savedRating).trim().length>0 && !isNaN(Number(savedRating))) disp = Number(savedRating).toFixed(1); } catch(e) { disp = null; }
++                if (disp != null) {
++                    try { $('#summary_rating_val').text(disp); } catch(e) { console.error('Failed to set #summary_rating_val', e); }
++                }
++            } catch(e) { console.error('detail rating immediate update error', e); }
              closeReviewModal();
              alert('리뷰가 저장되었습니다.');
              // Refresh review list
@@ -407,7 +416,7 @@ if (b != null) {
 
     function renderStars(val, target) { 
         var out='';
-        if (!val || String(val).trim()==='') out='☆☆☆☆☆';
+        if (!val || String(val).trim()=== '') out='☆☆☆☆☆';
         else { 
             var num = Math.floor(Number(val)); if (isNaN(num)) num = 0;
             for (var i=0;i<num;i++) out += '★';
@@ -777,35 +786,59 @@ if (b != null) {
 
             if (pending && pending.type === 'like' && pending.item) {
                 var pItem = pending.item;
-                var payload = { isbns: [], isbns13: [] };
-                if (pItem.isbn && pItem.isbn.toString().trim().length>0) payload.isbns.push(pItem.isbn.toString().trim());
-                if (pItem.isbn13 && pItem.isbn13.toString().trim().length>0) payload.isbns13.push(pItem.isbn13.toString().trim());
-                // fetch status for pending item and open modal appropriately
-                $.ajax({
-                    url: contextPath + '/review/status',
-                    type: 'POST',
-                    contentType: 'application/json; charset=UTF-8',
-                    data: JSON.stringify(payload),
-                    success: function(resp) {
-                        try {
-                            var statusObj = null;
-                            if (resp && resp.status === 'OK' && resp.data) {
-                                if (payload.isbns && payload.isbns.length>0 && resp.data[payload.isbns[0]]) statusObj = resp.data[payload.isbns[0]];
-                                if (!statusObj && payload.isbns13 && payload.isbns13.length>0 && resp.data[payload.isbns13[0]]) statusObj = resp.data[payload.isbns13[0]];
-                                if (!statusObj) {
-                                    var keys = Object.keys(resp.data || {});
-                                    if (keys && keys.length>0) statusObj = resp.data[keys[0]];
-                                }
-                            }
-                            if (statusObj) {
-                                detailStatus = statusObj;
-                                openEditReviewModal(pItem, null, statusObj);
-                            } else {
-                                openReviewModal(pItem, null);
-                            }
-                        } catch(e) { console.error('resume pending handler error', e); openReviewModal(pItem, null); }
-                    }, error: function() { openReviewModal(pItem, null); }
-                });
+                // If this pending item has a movie id, ask status by mvIds; otherwise ask by ISBNs
+                try {
+                    if (pItem.mvId && String(pItem.mvId).trim().length > 0) {
+                        var mvPayload = { mvIds: [ pItem.mvId ] };
+                        $.ajax({
+                            url: contextPath + '/review/status',
+                            type: 'POST',
+                            contentType: 'application/json; charset=UTF-8',
+                            data: JSON.stringify(mvPayload),
+                            success: function(resp) {
+                                try {
+                                    var statusObj = null;
+                                    if (resp && resp.status === 'OK' && resp.data) {
+                                        try { statusObj = resp.data[String(pItem.mvId)]; } catch(e) { statusObj = null; }
+                                    }
+                                    if (statusObj) {
+                                        detailStatus = statusObj;
+                                        openEditReviewModal(pItem, null, statusObj);
+                                    } else { openReviewModal(pItem, null); }
+                                } catch(e) { console.error('resume pending movie handler error', e); openReviewModal(pItem, null); }
+                            }, error: function() { openReviewModal(pItem, null); }
+                        });
+                    } else {
+                        var payload = { isbns: [], isbns13: [] };
+                        if (pItem.isbn && pItem.isbn.toString().trim().length>0) payload.isbns.push(pItem.isbn.toString().trim());
+                        if (pItem.isbn13 && pItem.isbn13.toString().trim().length>0) payload.isbns13.push(pItem.isbn13.toString().trim());
+                        $.ajax({
+                            url: contextPath + '/review/status',
+                            type: 'POST',
+                            contentType: 'application/json; charset=UTF-8',
+                            data: JSON.stringify(payload),
+                            success: function(resp) {
+                                try {
+                                    var statusObj = null;
+                                    if (resp && resp.status === 'OK' && resp.data) {
+                                        if (payload.isbns && payload.isbns.length>0 && resp.data[payload.isbns[0]]) statusObj = resp.data[payload.isbns[0]];
+                                        if (!statusObj && payload.isbns13 && payload.isbns13.length>0 && resp.data[payload.isbns13[0]]) statusObj = resp.data[payload.isbns13[0]];
+                                        if (!statusObj) {
+                                            var keys = Object.keys(resp.data || {});
+                                            if (keys && keys.length>0) statusObj = resp.data[keys[0]];
+                                        }
+                                    }
+                                    if (statusObj) {
+                                        detailStatus = statusObj;
+                                        openEditReviewModal(pItem, null, statusObj);
+                                    } else {
+                                        openReviewModal(pItem, null);
+                                    }
+                                } catch(e) { console.error('resume pending handler error', e); openReviewModal(pItem, null); }
+                            }, error: function() { openReviewModal(pItem, null); }
+                        });
+                    }
+                } catch(e) { console.error('resume pending overall error', e); openReviewModal(pItem, null); }
             }
         } catch (e) { console.error('Failed to resume pending action on detail page', e); }
     })();

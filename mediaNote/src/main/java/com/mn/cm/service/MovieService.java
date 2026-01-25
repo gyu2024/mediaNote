@@ -9,6 +9,12 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.HttpURLConnection;
+import java.net.URL;
 
 @Service
 public class MovieService {
@@ -17,6 +23,9 @@ public class MovieService {
 
     @Autowired
     private MovieDAO movieDAO;
+
+    @Value("${tmdb.api.key:}")
+    private String tmdbApiKey;
 
     public int saveMovie(Movie m) {
         return movieDAO.insertMovie(m);
@@ -94,6 +103,9 @@ public class MovieService {
                                 m.setGenreIds(gids.toString());
                             }
                         } catch(Exception e){}
+
+                        // Attempt to fetch credits for this tmdbId so we also persist CASTS and CREDITS
+                        // Credits enrichment disabled to keep search/save fast
 
                         Movie existed = ensureMovieSaved(m);
                         if (existed == null) inserted++;

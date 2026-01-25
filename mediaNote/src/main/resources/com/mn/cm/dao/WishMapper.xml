@@ -2,8 +2,8 @@
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.mn.cm.dao.WishMapper">
 
+    <!-- Book Wishlist Statements -->
     <insert id="insertOrUpdateWish" parameterType="map">
-        <!-- Insert into MN_BK_WISH; enforce unique key (USER_ID, ISBN) by using ON DUPLICATE KEY UPDATE to be idempotent -->
         INSERT INTO MN_BK_WISH (ISBN13, ISBN, USER_ID, REG_DT)
         VALUES (#{isbn13}, #{isbn}, #{userId}, NOW())
         ON DUPLICATE KEY UPDATE
@@ -45,7 +45,6 @@
         )
     </select>
 
-    <!-- New: fetch wishlist items for a user with optional pagination -->
     <select id="selectUserWishes" parameterType="map" resultType="map">
         SELECT w.ISBN as isbn, w.ISBN13 as isbn13, w.REG_DT as regDt,
                m.TITLE as title, m.AUTHOR as author, m.PUBLISHER as publisher, m.COVER as cover
@@ -56,6 +55,35 @@
         <if test="limit != null">
             LIMIT #{offset}, #{limit}
         </if>
+    </select>
+
+    <!-- Movie Wishlist Statements -->
+    <insert id="insertOrUpdateMovieWish" parameterType="map">
+        INSERT INTO MN_MV_WISH (MV_ID, USER_ID, REG_DT)
+        VALUES (#{mvId}, #{userId}, NOW())
+        ON DUPLICATE KEY UPDATE
+            REG_DT = VALUES(REG_DT)
+    </insert>
+
+    <delete id="deleteMovieWish" parameterType="map">
+        DELETE FROM MN_MV_WISH
+        WHERE USER_ID = #{userId}
+        <if test="mvId != null">
+            AND MV_ID = #{mvId}
+        </if>
+    </delete>
+
+    <select id="selectMovieWishCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM MN_MV_WISH w
+        WHERE w.MV_ID = #{mvId}
+    </select>
+
+    <select id="selectUserMovieWishCount" parameterType="map" resultType="long">
+        SELECT COUNT(*)
+        FROM MN_MV_WISH w
+        WHERE w.USER_ID = #{userId}
+        AND w.MV_ID = #{mvId}
     </select>
 
 </mapper>

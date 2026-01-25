@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.mn.cm.dao.GenreMapper">
+
+    <update id="upsertGenre" parameterType="com.mn.cm.model.Genre">
+        INSERT INTO MN_GENRE_MST (GENRE_ID, GENRE_NM, MEDIA_TYPE)
+        VALUES (#{genreId}, #{genreNm}, #{mediaType})
+        ON DUPLICATE KEY UPDATE GENRE_NM = VALUES(GENRE_NM), MEDIA_TYPE = VALUES(MEDIA_TYPE)
+    </update>
+
+    <delete id="deleteAllForMedia" parameterType="string">
+        DELETE FROM MN_GENRE_MST WHERE MEDIA_TYPE = #{mediaType}
+    </delete>
+
+    <!-- New: lookup names by a list of ids -->
+    <select id="selectNamesByIds" parameterType="map" resultType="map">
+        SELECT GENRE_ID as genreId, GENRE_NM as genreNm
+        FROM MN_GENRE_MST
+        <where>
+            <if test="ids != null and ids.size() &gt; 0">
+                GENRE_ID IN
+                <foreach item="id" collection="ids" open="(" separator="," close=")">
+                    #{id}
+                </foreach>
+            </if>
+        </where>
+    </select>
+
+</mapper>

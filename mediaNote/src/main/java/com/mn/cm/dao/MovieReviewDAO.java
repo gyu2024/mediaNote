@@ -102,4 +102,10 @@ public class MovieReviewDAO {
         params.put("regDt", (regDt != null) ? regDt : "");
         sqlSession.delete("com.mn.cm.dao.MovieReviewMapper.deleteUserReaction", params);
     }
+
+    public java.util.List<java.util.Map<String,Object>> selectMovieSummaries(java.util.List<Integer> mvIds) {
+        Map<String, Object> params = new HashMap<>();
+        params.put("mvIds", mvIds == null ? new java.util.ArrayList<Integer>() : mvIds);
+        return sqlSession.selectList("com.mn.cm.dao.MovieReviewMapper.selectMovieSummaries", params);
+    }
 }

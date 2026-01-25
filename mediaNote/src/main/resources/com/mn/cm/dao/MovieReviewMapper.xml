@@ -69,9 +69,41 @@
                 WHERE l.LIKE_TYPE = 0
                 AND r2.MV_ID = #{mvId}
             ) AS LIKE_CNT,
+            SUM(CASE WHEN (r.CMNT IS NOT NULL AND LENGTH(TRIM(r.CMNT)) > 0) THEN 1 ELSE 0 END) AS CMNT_CNT,
+            SUM(CASE WHEN (r.REVIEW_TEXT IS NOT NULL AND LENGTH(TRIM(r.REVIEW_TEXT)) > 0) THEN 1 ELSE 0 END) AS REVIEW_TEXT_CNT,
             SUM(CASE WHEN (r.CMNT IS NOT NULL AND LENGTH(TRIM(r.CMNT)) > 0) OR (r.REVIEW_TEXT IS NOT NULL AND LENGTH(TRIM(r.REVIEW_TEXT)) > 0) THEN 1 ELSE 0 END) AS REVIEW_WITH_TEXT_CNT
         FROM MN_MV_RVW r
         WHERE r.MV_ID = #{mvId}
+    </select>
+
+    <select id="selectMovieSummaries" parameterType="map" resultType="map">
+        SELECT
+            r.MV_ID AS MV_ID,
+            AVG(r.RATING) AS AVG_RATING,
+            SUM(CASE WHEN r.RATING IS NOT NULL THEN 1 ELSE 0 END) AS RATING_CNT,
+            SUM(CASE WHEN r.READ_YN = 'Y' THEN 1 ELSE 0 END) AS READ_CNT,
+            (
+                SELECT COUNT(*) FROM MN_MV_LIKE l
+                JOIN MN_MV_RVW r2 ON l.RVW_ID = r2.RVW_ID
+                WHERE l.LIKE_TYPE = 0
+                AND r2.MV_ID = r.MV_ID
+            ) AS LIKE_CNT,
+            SUM(CASE WHEN (r.CMNT IS NOT NULL AND LENGTH(TRIM(r.CMNT)) &gt; 0) THEN 1 ELSE 0 END) AS CMNT_CNT,
+            SUM(CASE WHEN (r.REVIEW_TEXT IS NOT NULL AND LENGTH(TRIM(r.REVIEW_TEXT)) &gt; 0) THEN 1 ELSE 0 END) AS REVIEW_TEXT_CNT,
+            SUM(CASE WHEN (r.CMNT IS NOT NULL AND LENGTH(TRIM(r.CMNT)) &gt; 0) OR (r.REVIEW_TEXT IS NOT NULL AND LENGTH(TRIM(r.REVIEW_TEXT)) &gt; 0) THEN 1 ELSE 0 END) AS REVIEW_WITH_TEXT_CNT
+        FROM MN_MV_RVW r
+        <where>
+            <if test="mvIds != null and mvIds.size() &gt; 0">
+                r.MV_ID IN
+                <foreach item="mvId" collection="mvIds" open="(" separator="," close=")">
+                    #{mvId}
+                </foreach>
+            </if>
+            <if test="mvIds == null or mvIds.size() == 0">
+                1 = 0
+            </if>
+        </where>
+        GROUP BY r.MV_ID
     </select>
 
     <delete id="deleteReview" parameterType="map">

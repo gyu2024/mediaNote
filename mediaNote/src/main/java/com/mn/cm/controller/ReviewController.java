@@ -127,15 +127,7 @@ public class ReviewController {
     public Map<String, Object> status(HttpServletRequest request, HttpSession session) {
         Map<String, Object> result = new HashMap<>();
         try {
-            com.mn.cm.model.User u = (com.mn.cm.model.User) session.getAttribute("USER_SESSION");
-            if (u == null) {
-                result.put("status", "ERR");
-                result.put("message", "NOT_LOGGED_IN");
-                return result;
-            }
-            String userId = String.valueOf(u.getId());
-
-            // parse request body or params
+            // Parse request body or params BEFORE enforcing login so we can support public movie-summary requests
             java.util.List<String> isbns = new java.util.ArrayList<>();
             java.util.List<String> isbns13 = new java.util.ArrayList<>();
             java.util.List<Integer> mvIds = new java.util.ArrayList<>();
@@ -179,21 +171,101 @@ public class ReviewController {
             }
             logger.debug("[STATUS] request isbns={} isbns13={} mvIds={}", isbns, isbns13, mvIds);
 
-            // If mvIds provided -> movie flow
+            // Retrieve user session if present (but DO NOT require login for movie-summary requests)
+            com.mn.cm.model.User u = (com.mn.cm.model.User) session.getAttribute("USER_SESSION");
+            String userId = null;
+            if (u != null) userId = String.valueOf(u.getId());
+
+            // If mvIds provided -> movie flow. Allow unauthenticated callers to receive aggregate summary data.
             if (mvIds != null && mvIds.size() > 0) {
-                java.util.List<java.util.Map<String,Object>> rows = movieReviewDAO.selectStatuses(userId, mvIds);
                 Map<String,Object> map = new HashMap<>();
-                for (Map<String,Object> r : rows) {
-                    Object mvObj = r.get("MV_ID") != null ? r.get("MV_ID") : r.get("mv_id");
-                    String mvKey = mvObj != null ? String.valueOf(mvObj) : null;
-                    Map<String,Object> st = new HashMap<>();
-                    st.put("readYn", r.get("READ_YN"));
-                    st.put("rating", r.get("RATING"));
-                    st.put("cmnt", r.get("CMNT"));
-                    st.put("reviewText", r.get("REVIEW_TEXT"));
-                    if (mvKey != null && mvKey.trim().length()>0) map.put(mvKey, st);
+
+                // If user is logged in, fetch per-user statuses so client can show read/review flags
+                if (userId != null) {
+                    try {
+                        java.util.List<java.util.Map<String,Object>> rows = movieReviewDAO.selectStatuses(userId, mvIds);
+                        for (Map<String,Object> r : rows) {
+                            Object mvObj = r.get("MV_ID") != null ? r.get("MV_ID") : r.get("mv_id");
+                            String mvKey = mvObj != null ? String.valueOf(mvObj) : null;
+                            Map<String,Object> st = new HashMap<>();
+                            // core fields (preserve original values)
+                            st.put("readYn", r.get("READ_YN"));
+                            st.put("rating", r.get("RATING"));
+                            st.put("cmnt", r.get("CMNT"));
+                            st.put("reviewText", r.get("REVIEW_TEXT"));
+                            // Explicit, normalized booleans to make client checks deterministic
+                            boolean hasReview = false;
+                            try {
+                                Object ratingObj = r.get("RATING");
+                                Object cmntObj = r.get("CMNT");
+                                Object reviewTextObj = r.get("REVIEW_TEXT");
+                                if (ratingObj != null) hasReview = true;
+                                if (!hasReview && cmntObj != null && String.valueOf(cmntObj).trim().length() > 0) hasReview = true;
+                                if (!hasReview && reviewTextObj != null && String.valueOf(reviewTextObj).trim().length() > 0) hasReview = true;
+                            } catch (Exception ignore) { }
+                            st.put("hasUserReview", hasReview);
+                            // userRead normalized boolean
+                            boolean userRead = false;
+                            try {
+                                Object ryn = r.get("READ_YN");
+                                if (ryn != null) {
+                                    String s = String.valueOf(ryn).trim();
+                                    if ("Y".equalsIgnoreCase(s) || "1".equals(s) || "true".equalsIgnoreCase(s)) userRead = true;
+                                }
+                            } catch (Exception ignore) {}
+                            st.put("userRead", userRead);
+                                 if (mvKey != null && mvKey.trim().length()>0) map.put(mvKey, st);
+                        }
+                    } catch (Exception ex) {
+                        logger.warn("[STATUS] failed to fetch per-user movie statuses: {}", ex.getMessage());
+                    }
                 }
+
+                // ALSO include aggregate summary (avg rating, counts) for each requested mvId so clients can display averages
+                try {
+                    // batch-fetch summaries for all requested mvIds
+                    java.util.List<java.util.Map<String,Object>> summaryRows = movieReviewDAO.selectMovieSummaries(mvIds);
+                    if (summaryRows != null) {
+                        for (java.util.Map<String,Object> srow : summaryRows) {
+                            try {
+                                Object mvObj = srow.get("MV_ID") != null ? srow.get("MV_ID") : srow.get("mv_id");
+                                if (mvObj == null) continue;
+                                String key = String.valueOf(mvObj);
+                                Object avg = srow.get("AVG_RATING") != null ? srow.get("AVG_RATING") : srow.get("avg_rating");
+                                Object rCnt = srow.get("RATING_CNT") != null ? srow.get("RATING_CNT") : srow.get("rating_cnt");
+                                Object readCnt = srow.get("READ_CNT") != null ? srow.get("READ_CNT") : srow.get("read_cnt");
+                                Object likeCnt = srow.get("LIKE_CNT") != null ? srow.get("LIKE_CNT") : srow.get("like_cnt");
+                                Object reviewWithTextCnt = srow.get("REVIEW_WITH_TEXT_CNT") != null ? srow.get("REVIEW_WITH_TEXT_CNT") : srow.get("review_with_text_cnt");
+                                Object cmntCnt = srow.get("CMNT_CNT") != null ? srow.get("CMNT_CNT") : srow.get("cmnt_cnt");
+                                Object reviewTextCnt = srow.get("REVIEW_TEXT_CNT") != null ? srow.get("REVIEW_TEXT_CNT") : srow.get("review_text_cnt");
+                                // compute reviewCnt from reviewWithTextCnt if available
+                                Object reviewCnt = reviewWithTextCnt != null ? reviewWithTextCnt : 0;
+                                Map<String,Object> existing = (Map<String,Object>) map.get(key);
+                                if (existing == null) existing = new HashMap<>();
+                                existing.put("avgRating", avg != null ? avg : null);
+                                existing.put("ratingCount", rCnt != null ? rCnt : 0);
+                                existing.put("readCount", readCnt != null ? readCnt : 0);
+                                existing.put("cmntCount", cmntCnt != null ? cmntCnt : 0);
+                                existing.put("reviewTextCount", reviewTextCnt != null ? reviewTextCnt : 0);
+                                // prefer explicit review-with-text count as likeCount if present
+                                existing.put("likeCount", reviewWithTextCnt != null ? reviewWithTextCnt : (likeCnt != null ? likeCnt : 0));
+                                existing.put("reviewCount", reviewCnt != null ? reviewCnt : 0);
+                                map.put(key, existing);
+                            } catch (Exception inner) { logger.warn("[STATUS] failed to merge summary row: {}", inner.getMessage()); }
+                        }
+                    }
+                } catch (Exception ex) {
+                    logger.warn("[STATUS] movie summary aggregation failed: {}", ex.getMessage());
+                }
+
                 result.put("status", "OK"); result.put("data", map); return result;
+            }
+
+            // For non-movie (book) flow require login as before
+            if (userId == null) {
+                result.put("status", "ERR");
+                result.put("message", "NOT_LOGGED_IN");
+                return result;
             }
 
             // book flow (existing)
@@ -627,11 +699,14 @@ public class ReviewController {
                     data.put("ratingCount", rCnt != null ? rCnt : 0);
                     data.put("readCount", readCnt != null ? readCnt : 0);
                     data.put("likeCount", likeCnt != null ? likeCnt : 0);
+                    // expose reviewCount (reviews or one-line comments count)
+                    data.put("reviewCount", reviewWithTextCnt != null ? reviewWithTextCnt : 0);
                 } else {
                     data.put("avgRating", null);
                     data.put("ratingCount", 0);
                     data.put("readCount", 0);
                     data.put("likeCount", 0);
+                    data.put("reviewCount", 0);
                 }
                 logger.info("[SUMMARY] returning data={}", data);
                 result.put("status","OK"); result.put("data", data); return result;
@@ -656,11 +731,13 @@ public class ReviewController {
                 data.put("ratingCount", rCnt != null ? rCnt : 0);
                 data.put("readCount", readCnt != null ? readCnt : 0);
                 data.put("likeCount", likeCnt != null ? likeCnt : 0);
+                data.put("reviewCount", reviewWithTextCnt != null ? reviewWithTextCnt : 0);
             } else {
                 data.put("avgRating", null);
                 data.put("ratingCount", 0);
                 data.put("readCount", 0);
                 data.put("likeCount", 0);
+                data.put("reviewCount", 0);
             }
             logger.info("[SUMMARY] returning data={}", data);
             result.put("status","OK"); result.put("data", data); return result;
